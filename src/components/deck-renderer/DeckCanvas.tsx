@@ -15,6 +15,8 @@ interface Camera {
   x: number;
   y: number;
   zoom: number;
+  /** Rotation angle in radians for isometric view (orbit around Z) */
+  rotationAngle: number;
 }
 
 // ─── Shared helpers ──────────────────────────────────────────────────────────
@@ -420,44 +422,49 @@ function drawElevationView(ctx: CanvasRenderingContext2D, cw: number, ch: number
 
 // ─── Isometric (2.5D) view ───────────────────────────────────────────────────
 
-function isoProject(x: number, y: number, z: number, scale: number): [number, number] {
+function isoProject(x: number, y: number, z: number, scale: number, rotation = 0): [number, number] {
+  // Rotate around the Z axis before projecting
+  const cos = Math.cos(rotation);
+  const sin = Math.sin(rotation);
+  const rx = x * cos - y * sin;
+  const ry = x * sin + y * cos;
   // Standard isometric: 30° angles
-  const ix = (x - y) * Math.cos(Math.PI / 6) * scale;
-  const iy = (x + y) * Math.sin(Math.PI / 6) * scale - z * scale;
+  const ix = (rx - ry) * Math.cos(Math.PI / 6) * scale;
+  const iy = (rx + ry) * Math.sin(Math.PI / 6) * scale - z * scale;
   return [ix, iy];
 }
 
-function drawIsoView(ctx: CanvasRenderingContext2D, cw: number, ch: number, config: DeckConfig) {
+function drawIsoView(ctx: CanvasRenderingContext2D, cw: number, ch: number, config: DeckConfig, rotation = 0) {
   const w = config.dimensions.width;
   const d = config.dimensions.depth;
   const h = config.dimensions.height;
   const railH = config.railing !== "none" ? 3 : 0;
 
-  // Compute scale to fit
-  const testPoints = [
-    isoProject(0, 0, 0, 1),
-    isoProject(w, 0, 0, 1),
-    isoProject(0, d, 0, 1),
-    isoProject(w, d, 0, 1),
-    isoProject(0, 0, h + railH, 1),
-    isoProject(w, 0, h + railH, 1),
+  // Compute scale to fit — test all 8 corners of the bounding box
+  const corners = [
+    [0, 0, 0], [w, 0, 0], [0, d, 0], [w, d, 0],
+    [0, 0, h + railH], [w, 0, h + railH], [0, d, h + railH], [w, d, h + railH],
   ];
+  const testPoints = corners.map(([cx, cy, cz]) => isoProject(cx, cy, cz, 1, rotation));
   const minX = Math.min(...testPoints.map(p => p[0]));
   const maxX = Math.max(...testPoints.map(p => p[0]));
   const minY = Math.min(...testPoints.map(p => p[1]));
   const maxY = Math.max(...testPoints.map(p => p[1]));
-  const rangeX = maxX - minX;
-  const rangeY = maxY - minY;
+  const rangeX = maxX - minX || 1;
+  const rangeY = maxY - minY || 1;
   const scale = Math.min((cw - PADDING * 2) / rangeX, (ch - PADDING * 2) / rangeY);
 
-  // Center offset
-  const [cMinX, cMinY] = isoProject(0, d, h + railH, scale);
-  const [cMaxX] = isoProject(w, 0, 0, scale);
-  const offsetX = cw / 2 - (cMinX + cMaxX) / 2;
-  const offsetY = ch / 2 - (cMinY + isoProject(0, 0, 0, scale)[1]) / 2;
+  // Center offset — recompute bounds at actual scale
+  const scaledPts = corners.map(([cx, cy, cz]) => isoProject(cx, cy, cz, scale, rotation));
+  const sMinX = Math.min(...scaledPts.map(p => p[0]));
+  const sMaxX = Math.max(...scaledPts.map(p => p[0]));
+  const sMinY = Math.min(...scaledPts.map(p => p[1]));
+  const sMaxY = Math.max(...scaledPts.map(p => p[1]));
+  const offsetX = cw / 2 - (sMinX + sMaxX) / 2;
+  const offsetY = ch / 2 - (sMinY + sMaxY) / 2;
 
   function p(x: number, y: number, z: number): [number, number] {
-    const [ix, iy] = isoProject(x, y, z, scale);
+    const [ix, iy] = isoProject(x, y, z, scale, rotation);
     return [ix + offsetX, iy + offsetY];
   }
 
@@ -580,6 +587,55 @@ function drawIsoView(ctx: CanvasRenderingContext2D, cw: number, ch: number, conf
     }
   }
 
+  // ── Stairs ──
+  if (config.stairs.location !== "none") {
+    const stepCount = Math.ceil((h * 12) / 7.5);
+    const stairW = config.stairs.width;
+    const stepRun = 0.85; // ~10" run per step in feet
+
+    // Determine stair start point and direction
+    let sx0: number, sy0: number, dx: number, dy: number;
+    switch (config.stairs.location) {
+      case "front": sx0 = (w - stairW) / 2; sy0 = d; dx = 0; dy = 1; break;
+      case "back":  sx0 = (w - stairW) / 2; sy0 = 0; dx = 0; dy = -1; break;
+      case "left":  sx0 = 0; sy0 = (d - stairW) / 2; dx = -1; dy = 0; break;
+      case "right": sx0 = w; sy0 = (d - stairW) / 2; dx = 1; dy = 0; break;
+      default: sx0 = 0; sy0 = 0; dx = 0; dy = 0;
+    }
+
+    for (let i = 0; i < stepCount; i++) {
+      const z = h - (i + 1) * (h / stepCount);
+      const offset = i * stepRun;
+      const nextOffset = (i + 1) * stepRun;
+
+      // Calculate the 4 corners of each step tread
+      const isLateral = config.stairs.location === "left" || config.stairs.location === "right";
+      let c0: [number, number], c1: [number, number], c2: [number, number], c3: [number, number];
+      if (isLateral) {
+        const x0 = sx0 + dx * offset;
+        const x1 = sx0 + dx * nextOffset;
+        c0 = p(x0, sy0, z);
+        c1 = p(x1, sy0, z);
+        c2 = p(x1, sy0 + stairW, z);
+        c3 = p(x0, sy0 + stairW, z);
+      } else {
+        const y0 = sy0 + dy * offset;
+        const y1 = sy0 + dy * nextOffset;
+        c0 = p(sx0, y0, z);
+        c1 = p(sx0 + stairW, y0, z);
+        c2 = p(sx0 + stairW, y1, z);
+        c3 = p(sx0, y1, z);
+      }
+
+      ctx.fillStyle = i % 2 === 0 ? "#b8a080" : "#c4aa88";
+      ctx.beginPath();
+      ctx.moveTo(c0[0], c0[1]); ctx.lineTo(c1[0], c1[1]);
+      ctx.lineTo(c2[0], c2[1]); ctx.lineTo(c3[0], c3[1]);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = "#8b7355"; ctx.lineWidth = 1; ctx.stroke();
+    }
+  }
+
   // ── Dimension labels ──
   ctx.fillStyle = "#444"; ctx.font = "12px sans-serif"; ctx.textAlign = "center";
   const [dwx, dwy] = p(w / 2, d + 1.5, 0);
@@ -641,8 +697,9 @@ export default function DeckCanvas() {
   const { state } = useDeck();
   const { config } = state;
   const [view, setView] = useState<CanvasView>("isometric");
-  const [camera, setCamera] = useState<Camera>({ x: 0, y: 0, zoom: 1 });
+  const [camera, setCamera] = useState<Camera>({ x: 0, y: 0, zoom: 1, rotationAngle: 0 });
   const dragging = useRef(false);
+  const dragButton = useRef(0);
   const lastMouse = useRef({ x: 0, y: 0 });
 
   const draw = useCallback(() => {
@@ -666,7 +723,7 @@ export default function DeckCanvas() {
       case "surface": drawSurfaceView(ctx, cw, ch, config); break;
       case "framing": drawFramingFull(ctx, cw, ch, config); break;
       case "elevation": drawElevationView(ctx, cw, ch, config); break;
-      case "isometric": drawIsoView(ctx, cw, ch, config); break;
+      case "isometric": drawIsoView(ctx, cw, ch, config, camera.rotationAngle); break;
     }
     ctx.restore();
   }, [config, view, camera]);
@@ -680,12 +737,13 @@ export default function DeckCanvas() {
 
   // Reset camera when view or config changes
   useEffect(() => {
-    setCamera({ x: 0, y: 0, zoom: 1 });
+    setCamera({ x: 0, y: 0, zoom: 1, rotationAngle: 0 });
   }, [view, config]);
 
-  // ── Mouse handlers for pan/zoom ──
+  // ── Mouse handlers for pan/zoom/rotate ──
   function onMouseDown(e: React.MouseEvent) {
     dragging.current = true;
+    dragButton.current = e.button;
     lastMouse.current = { x: e.clientX, y: e.clientY };
   }
   function onMouseMove(e: React.MouseEvent) {
@@ -693,7 +751,13 @@ export default function DeckCanvas() {
     const dx = e.clientX - lastMouse.current.x;
     const dy = e.clientY - lastMouse.current.y;
     lastMouse.current = { x: e.clientX, y: e.clientY };
-    setCamera(c => ({ ...c, x: c.x + dx / c.zoom, y: c.y + dy / c.zoom }));
+
+    // In 3D view: left-drag rotates, right-drag or shift+drag pans
+    if (view === "isometric" && dragButton.current === 0 && !e.shiftKey) {
+      setCamera(c => ({ ...c, rotationAngle: c.rotationAngle + dx * 0.01 }));
+    } else {
+      setCamera(c => ({ ...c, x: c.x + dx / c.zoom, y: c.y + dy / c.zoom }));
+    }
   }
   function onMouseUp() { dragging.current = false; }
   function onWheel(e: React.WheelEvent) {
@@ -759,13 +823,13 @@ export default function DeckCanvas() {
           className="h-7 w-7 rounded bg-white/90 border border-gray-200 text-gray-600 text-sm font-bold shadow-sm hover:bg-gray-100"
         >-</button>
         <button
-          onClick={() => setCamera({ x: 0, y: 0, zoom: 1 })}
+          onClick={() => setCamera({ x: 0, y: 0, zoom: 1, rotationAngle: 0 })}
           className="h-7 rounded bg-white/90 border border-gray-200 text-gray-500 text-[10px] px-2 shadow-sm hover:bg-gray-100"
         >Reset</button>
       </div>
 
       <div className="absolute bottom-2 right-2 rounded bg-white/80 px-2 py-1 text-[10px] text-gray-400">
-        Drag to pan · Scroll to zoom
+        {view === "isometric" ? "Drag to rotate · Shift+drag to pan · Scroll to zoom" : "Drag to pan · Scroll to zoom"}
       </div>
     </div>
   );

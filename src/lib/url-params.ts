@@ -20,6 +20,7 @@ export function configToParams(config: DeckConfig): URLSearchParams {
   p.set("bp", config.boardPattern);
   p.set("rl", config.railing);
   p.set("rb", config.railingBrand);
+  p.set("bt", config.beamType);
   p.set("sl", config.stairs.location);
   p.set("sw", String(config.stairs.width));
   p.set("la", config.ledgerAttached ? "1" : "0");
@@ -62,6 +63,8 @@ export function paramsToConfig(params: URLSearchParams): DeckConfig | null {
       (params.get("rl") as DeckConfig["railing"]) ?? def.railing,
     railingBrand:
       (params.get("rb") as DeckConfig["railingBrand"]) ?? def.railingBrand,
+    beamType:
+      (params.get("bt") as DeckConfig["beamType"]) ?? def.beamType,
     stairs: {
       location:
         (params.get("sl") as DeckConfig["stairs"]["location"]) ??

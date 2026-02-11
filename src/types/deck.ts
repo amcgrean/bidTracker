@@ -26,6 +26,8 @@ export type BoardWidth = "5.5" | "3.5"; // inches (nominal 6" and 4")
 
 export type BoardPattern = "standard" | "diagonal" | "herringbone" | "picture-frame";
 
+export type BeamType = "dropped" | "flush";
+
 export type StairLocation = "none" | "front" | "back" | "left" | "right";
 
 export interface DeckDimensions {
@@ -55,6 +57,7 @@ export interface DeckConfig {
   boardPattern: BoardPattern;
   railing: RailingType;
   railingBrand: RailingBrand;
+  beamType: BeamType;
   stairs: StairConfig;
   ledgerAttached: boolean; // attached to house on one side?
 }
@@ -102,6 +105,7 @@ export const DEFAULT_DECK_CONFIG: DeckConfig = {
   boardPattern: "standard",
   railing: "wood",
   railingBrand: "generic",
+  beamType: "dropped",
   stairs: { location: "front", width: 4 },
   ledgerAttached: true,
 };

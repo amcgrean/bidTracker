@@ -8,23 +8,6 @@ import {
 } from "@/types/deck";
 import OptionCard from "@/components/ui/OptionCard";
 
-const CATEGORIES: {
-  value: DeckingCategory;
-  label: string;
-  description: string;
-}[] = [
-  {
-    value: "wood",
-    label: "Wood Decking",
-    description: "Traditional lumber — pressure-treated or cedar.",
-  },
-  {
-    value: "composite",
-    label: "Composite Decking",
-    description: "Low-maintenance boards from Trex, TimberTech, Wolf, and more.",
-  },
-];
-
 const WOOD_MATERIALS: {
   value: DeckingMaterial;
   label: string;
@@ -32,13 +15,13 @@ const WOOD_MATERIALS: {
 }[] = [
   {
     value: "pressure-treated",
-    label: "Pressure-Treated Lumber",
-    description: "Most affordable. Requires staining/sealing every 1-2 years.",
+    label: "Pressure-Treated",
+    description: "Most affordable. Stain/seal every 1-2 years.",
   },
   {
     value: "cedar",
     label: "Cedar",
-    description: "Naturally rot-resistant with beautiful grain. Moderate cost.",
+    description: "Naturally rot-resistant. Beautiful grain.",
   },
 ];
 
@@ -47,46 +30,16 @@ const COMPOSITE_MATERIALS: {
   label: string;
   description: string;
 }[] = [
-  {
-    value: "composite-trex",
-    label: "Trex",
-    description:
-      "Industry leader. Transcend, Enhance, and Select lines. 25-year warranty.",
-  },
-  {
-    value: "composite-timbertech",
-    label: "TimberTech / AZEK",
-    description:
-      "Premium composite and PVC lines. Advanced cap technology. 30+ year warranty.",
-  },
-  {
-    value: "composite-deckorators",
-    label: "Deckorators",
-    description:
-      "Mineral-based composite. Surestone core resists moisture and mold.",
-  },
-  {
-    value: "composite-wolf",
-    label: "Wolf Home Products",
-    description:
-      "Serenity and Perspective lines. Natural wood look with lasting performance.",
-  },
-  {
-    value: "composite-moistureshield",
-    label: "MoistureShield",
-    description:
-      "Built for wet environments. Heat-tolerant, slip-resistant, pool-friendly.",
-  },
-];
-
-const BOARD_WIDTHS: { value: BoardWidth; label: string }[] = [
-  { value: "5.5", label: '5.5" (nominal 6")' },
-  { value: "3.5", label: '3.5" (nominal 4")' },
+  { value: "composite-trex", label: "Trex", description: "Transcend, Enhance, Select. 25-yr warranty." },
+  { value: "composite-timbertech", label: "TimberTech / AZEK", description: "Premium PVC. 30+ yr warranty." },
+  { value: "composite-deckorators", label: "Deckorators", description: "Mineral-based Surestone core." },
+  { value: "composite-wolf", label: "Wolf", description: "Serenity & Perspective lines." },
+  { value: "composite-moistureshield", label: "MoistureShield", description: "Pool-friendly. Slip-resistant." },
 ];
 
 export default function MaterialStep() {
   const { state, dispatch } = useDeck();
-  const { deckingCategory, material } = state.config;
+  const { deckingCategory, material, boardWidth } = state.config;
 
   const materialOptions =
     deckingCategory === "wood" ? WOOD_MATERIALS : COMPOSITE_MATERIALS;
@@ -105,29 +58,16 @@ export default function MaterialStep() {
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-900 mb-1">Decking Material</h2>
-      <p className="text-sm text-gray-500 mb-6">
-        Choose between wood and composite, then pick a specific product.
-      </p>
+      <h2 className="text-base font-bold text-gray-900 mb-3">Material</h2>
 
-      {/* Category selector */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 mb-6">
-        {CATEGORIES.map((c) => (
-          <OptionCard
-            key={c.value}
-            label={c.label}
-            description={c.description}
-            selected={deckingCategory === c.value}
-            onClick={() => setCategory(c.value)}
-          />
-        ))}
+      {/* Category toggle */}
+      <div className="flex gap-2 mb-4">
+        <OptionCard compact label="Wood" selected={deckingCategory === "wood"} onClick={() => setCategory("wood")} />
+        <OptionCard compact label="Composite" selected={deckingCategory === "composite"} onClick={() => setCategory("composite")} />
       </div>
 
-      {/* Specific material / brand */}
-      <h3 className="text-md font-semibold text-gray-800 mb-3">
-        {deckingCategory === "wood" ? "Wood Type" : "Brand"}
-      </h3>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {/* Brand/type */}
+      <div className="grid grid-cols-2 gap-2 mb-4">
         {materialOptions.map((m) => (
           <OptionCard
             key={m.value}
@@ -135,30 +75,25 @@ export default function MaterialStep() {
             description={m.description}
             selected={material === m.value}
             onClick={() =>
-              dispatch({
-                type: "UPDATE_CONFIG",
-                payload: { material: m.value },
-              })
+              dispatch({ type: "UPDATE_CONFIG", payload: { material: m.value } })
             }
           />
         ))}
       </div>
 
       {/* Board width */}
-      <h3 className="mt-6 text-md font-semibold text-gray-800 mb-3">
+      <h3 className="text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">
         Board Width
       </h3>
-      <div className="flex gap-3">
-        {BOARD_WIDTHS.map((bw) => (
+      <div className="flex gap-2">
+        {([["5.5", '5.5" (6" nom.)'], ["3.5", '3.5" (4" nom.)']] as const).map(([val, lbl]) => (
           <OptionCard
-            key={bw.value}
-            label={bw.label}
-            selected={state.config.boardWidth === bw.value}
+            key={val}
+            compact
+            label={lbl}
+            selected={boardWidth === val}
             onClick={() =>
-              dispatch({
-                type: "UPDATE_CONFIG",
-                payload: { boardWidth: bw.value },
-              })
+              dispatch({ type: "UPDATE_CONFIG", payload: { boardWidth: val as BoardWidth } })
             }
           />
         ))}

@@ -1,2 +1,2 @@
-# bidTracker
-track bids and designs
+# Configurator
+get the look of your deck plus a rough estimate of materials

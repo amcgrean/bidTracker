@@ -1,6 +1,7 @@
 "use client";
 
 import { useDeck } from "@/lib/deck-context";
+import { useAutoAdvance } from "@/lib/use-auto-advance";
 import { BoardPattern } from "@/types/deck";
 import OptionCard from "@/components/ui/OptionCard";
 
@@ -33,7 +34,8 @@ const PATTERNS: { value: BoardPattern; label: string; description: string }[] =
   ];
 
 export default function PatternStep() {
-  const { state, dispatch } = useDeck();
+  const { state } = useDeck();
+  const selectAndAdvance = useAutoAdvance();
 
   return (
     <div>
@@ -48,12 +50,7 @@ export default function PatternStep() {
             label={p.label}
             description={p.description}
             selected={state.config.boardPattern === p.value}
-            onClick={() =>
-              dispatch({
-                type: "UPDATE_CONFIG",
-                payload: { boardPattern: p.value },
-              })
-            }
+            onClick={() => selectAndAdvance({ boardPattern: p.value })}
           />
         ))}
       </div>

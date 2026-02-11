@@ -62,6 +62,18 @@ const RAIL_COLORS: Record<string, string> = {
   glass: "#88bbdd",
 };
 
+const FACADE_BASE_COLORS: Record<string, string> = {
+  vinyl: "#d5d0c8",
+  brick: "#b46a4d",
+  stone: "#a8a49d",
+  stucco: "#d8cfbf",
+  wood: "#9c7a5d",
+};
+
+function facadeColor(config: DeckConfig): string {
+  return config.houseColor || FACADE_BASE_COLORS[config.exteriorFacade] || "#d5d0c8";
+}
+
 // ─── Surface (top-down) view ─────────────────────────────────────────────────
 
 function drawDeckBoards(ctx: CanvasRenderingContext2D, x: number, y: number, wPx: number, dPx: number, config: DeckConfig, scale: number) {
@@ -155,8 +167,8 @@ function drawStairs2D(ctx: CanvasRenderingContext2D, x: number, y: number, wPx: 
 }
 
 function drawHouseWall(ctx: CanvasRenderingContext2D, x: number, y: number, wPx: number, config: DeckConfig) {
-  if (!config.ledgerAttached) return;
-  ctx.fillStyle = "#e0ddd5"; ctx.strokeStyle = "#999"; ctx.lineWidth = 2;
+  if (!config.ledgerAttached || !config.hasHouse) return;
+  ctx.fillStyle = facadeColor(config); ctx.strokeStyle = "#999"; ctx.lineWidth = 2;
   const wh = 20;
   ctx.fillRect(x - 10, y - wh, wPx + 20, wh);
   ctx.strokeRect(x - 10, y - wh, wPx + 20, wh);
@@ -278,9 +290,9 @@ function drawElevationView(ctx: CanvasRenderingContext2D, cw: number, ch: number
   ctx.fillText("GRADE", ox - 8, groundY + 4);
 
   // ── House wall (if ledger attached) ──
-  if (config.ledgerAttached) {
+  if (config.ledgerAttached && config.hasHouse) {
     const wallH = deckHPx + railHPx + 40;
-    ctx.fillStyle = "#e0ddd5";
+    ctx.fillStyle = facadeColor(config);
     ctx.strokeStyle = "#999";
     ctx.lineWidth = 2;
     ctx.fillRect(ox - 12, deckTopY - railHPx - 20, 12, wallH);
@@ -492,6 +504,19 @@ function drawIsoView(ctx: CanvasRenderingContext2D, cw: number, ch: number, conf
     return [ix + offsetX, iy + offsetY];
   }
 
+  if (config.showGrass) {
+    const pad = Math.max(w, d) * 0.4;
+    const [g0x, g0y] = p(-pad, -pad, 0);
+    const [g1x, g1y] = p(w + pad, -pad, 0);
+    const [g2x, g2y] = p(w + pad, d + pad, 0);
+    const [g3x, g3y] = p(-pad, d + pad, 0);
+    ctx.fillStyle = "#7fa86c";
+    ctx.beginPath();
+    ctx.moveTo(g0x, g0y); ctx.lineTo(g1x, g1y); ctx.lineTo(g2x, g2y); ctx.lineTo(g3x, g3y);
+    ctx.closePath();
+    ctx.fill();
+  }
+
   // ── Support posts ──
   const postSp = 6;
   const postCountW = Math.ceil(w / postSp) + 1;
@@ -606,13 +631,13 @@ function drawIsoView(ctx: CanvasRenderingContext2D, cw: number, ch: number, conf
   ctx.restore();
 
   // ── House wall ──
-  if (config.ledgerAttached) {
+  if (config.ledgerAttached && config.hasHouse) {
     const wallH = h + railH + 2;
     const [w0x, w0y] = p(0, -0.5, 0);
     const [w1x, w1y] = p(w, -0.5, 0);
     const [w2x, w2y] = p(w, -0.5, wallH);
     const [w3x, w3y] = p(0, -0.5, wallH);
-    ctx.fillStyle = "#d5d0c8";
+    ctx.fillStyle = facadeColor(config);
     ctx.beginPath();
     ctx.moveTo(w0x, w0y); ctx.lineTo(w1x, w1y); ctx.lineTo(w2x, w2y); ctx.lineTo(w3x, w3y);
     ctx.closePath(); ctx.fill();
@@ -620,6 +645,21 @@ function drawIsoView(ctx: CanvasRenderingContext2D, cw: number, ch: number, conf
     ctx.fillStyle = "#888"; ctx.font = "11px sans-serif"; ctx.textAlign = "center";
     const [lx, ly] = p(w / 2, -0.5, wallH - 0.5);
     ctx.fillText("HOUSE", lx, ly);
+
+    if (config.patioDoor) {
+      const doorW = Math.max(2.5, Math.min(4, w * 0.25));
+      const doorH = Math.max(6, h + 0.5);
+      const dx0 = (w - doorW) / 2;
+      const [d0x, d0y] = p(dx0, -0.49, 0);
+      const [d1x, d1y] = p(dx0 + doorW, -0.49, 0);
+      const [d2x, d2y] = p(dx0 + doorW, -0.49, doorH);
+      const [d3x, d3y] = p(dx0, -0.49, doorH);
+      ctx.fillStyle = "#e7edf5";
+      ctx.beginPath();
+      ctx.moveTo(d0x, d0y); ctx.lineTo(d1x, d1y); ctx.lineTo(d2x, d2y); ctx.lineTo(d3x, d3y);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = "#8ca0b8"; ctx.lineWidth = 1; ctx.stroke();
+    }
   }
 
   // ── Railing ──

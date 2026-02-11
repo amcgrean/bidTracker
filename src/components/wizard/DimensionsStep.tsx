@@ -7,7 +7,7 @@ import OptionCard from "@/components/ui/OptionCard";
 
 export default function DimensionsStep() {
   const { state, dispatch } = useDeck();
-  const { dimensions, shape, ledgerAttached, beamType } = state.config;
+  const { dimensions, shape, ledgerAttached, beamType, hasHouse } = state.config;
   const showExtension = shape === "l-shape" || shape === "t-shape" || shape === "wrap-around";
 
   function update(patch: Partial<typeof dimensions>) {
@@ -75,6 +75,7 @@ export default function DimensionsStep() {
           <input
             type="checkbox"
             checked={ledgerAttached}
+            disabled={!hasHouse}
             onChange={(e) =>
               dispatch({
                 type: "UPDATE_CONFIG",
@@ -84,6 +85,7 @@ export default function DimensionsStep() {
             className="h-4 w-4 rounded border-gray-300 text-blue-600"
           />
           <span className="text-sm text-gray-700">Ledger-attached to house</span>
+          {!hasHouse && <span className="text-xs text-gray-400">(enable house on first step to attach ledger)</span>}
         </label>
 
         <div>

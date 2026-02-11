@@ -9,22 +9,22 @@ const SHAPES: { value: DeckShape; label: string; description: string }[] = [
   {
     value: "rectangle",
     label: "Rectangle",
-    description: "Simple rectangular deck — the most common and economical shape.",
+    description: "Simple rectangular — most common and economical.",
   },
   {
     value: "l-shape",
     label: "L-Shape",
-    description: "Wraps around a corner of the house, creating two distinct areas.",
+    description: "Wraps a corner, creating two distinct areas.",
   },
   {
     value: "t-shape",
     label: "T-Shape",
-    description: "Extended section off one side for a dining or seating nook.",
+    description: "Extended section for a dining or seating nook.",
   },
   {
     value: "wrap-around",
     label: "Wrap-Around",
-    description: "Runs along two sides of the house for maximum outdoor space.",
+    description: "Runs along two sides for maximum space.",
   },
 ];
 
@@ -34,11 +34,8 @@ export default function ShapeStep() {
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-900 mb-1">Deck Shape</h2>
-      <p className="text-sm text-gray-500 mb-6">
-        Choose the overall footprint of your deck.
-      </p>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <h2 className="text-base font-bold text-gray-900 mb-3">Deck Shape</h2>
+      <div className="grid grid-cols-2 gap-2">
         {SHAPES.map((s) => (
           <OptionCard
             key={s.value}

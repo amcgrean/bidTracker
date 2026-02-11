@@ -100,16 +100,42 @@ export function estimateMaterials(config: DeckConfig): MaterialList {
     totalCost: joistCount * joistLength * 1.5,
   });
 
-  // --- Beams (doubled 2x8) ---
+  // --- Beams ---
+  const isFlush = config.beamType === "flush";
   const beamCount = Math.ceil(config.dimensions.depth / POST_SPACING) + 1;
-  items.push({
-    name: "Beam boards (2x8)",
-    description: `Doubled, ${config.dimensions.width}' span`,
-    quantity: beamCount * 2,
-    unit: "each",
-    unitCost: config.dimensions.width * 1.5,
-    totalCost: beamCount * 2 * config.dimensions.width * 1.5,
-  });
+
+  if (isFlush) {
+    // Engineered / flush beam — LVL or PSL, sits flush with joists
+    const flushBeamCostPerFt = 6.0; // LVL ~$6/ft
+    items.push({
+      name: "Engineered beam (LVL)",
+      description: `Flush mount, ${config.dimensions.width}' span`,
+      quantity: beamCount,
+      unit: "each",
+      unitCost: config.dimensions.width * flushBeamCostPerFt,
+      totalCost: beamCount * config.dimensions.width * flushBeamCostPerFt,
+    });
+
+    // Flush beams need beam hangers
+    items.push({
+      name: "Beam hangers (flush mount)",
+      description: "Simpson?"  + " or equiv. concealed hanger",
+      quantity: beamCount * 2,
+      unit: "each",
+      unitCost: 18,
+      totalCost: beamCount * 2 * 18,
+    });
+  } else {
+    // Standard dropped beam — doubled 2x8 dimensional lumber
+    items.push({
+      name: "Beam boards (2x8)",
+      description: `Doubled, ${config.dimensions.width}' span`,
+      quantity: beamCount * 2,
+      unit: "each",
+      unitCost: config.dimensions.width * 1.5,
+      totalCost: beamCount * 2 * config.dimensions.width * 1.5,
+    });
+  }
 
   // --- Posts (4x4 or 6x6) ---
   const postsPerBeam = Math.ceil(config.dimensions.width / POST_SPACING) + 1;
@@ -215,6 +241,12 @@ export function estimateMaterials(config: DeckConfig): MaterialList {
     "Permit costs and labor are not included.",
     "Foundation requirements may vary by local code — consult a professional.",
   );
+
+  if (isFlush) {
+    notes.push(
+      "Flush/engineered beams (LVL) eliminate the dropped beam below the deck surface. Requires concealed beam hangers.",
+    );
+  }
 
   return { items, totalCost, notes };
 }

@@ -6,11 +6,11 @@ import OptionCard from "@/components/ui/OptionCard";
 import NumberInput from "@/components/ui/NumberInput";
 
 const LOCATIONS: { value: StairLocation; label: string }[] = [
-  { value: "none", label: "No Stairs" },
+  { value: "none", label: "None" },
   { value: "front", label: "Front" },
   { value: "back", label: "Back" },
-  { value: "left", label: "Left Side" },
-  { value: "right", label: "Right Side" },
+  { value: "left", label: "Left" },
+  { value: "right", label: "Right" },
 ];
 
 export default function StairsStep() {
@@ -19,15 +19,13 @@ export default function StairsStep() {
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-900 mb-1">Stairs</h2>
-      <p className="text-sm text-gray-500 mb-6">
-        Add stairs to access the deck from the yard.
-      </p>
+      <h2 className="text-base font-bold text-gray-900 mb-3">Stairs</h2>
 
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-2">
         {LOCATIONS.map((loc) => (
           <OptionCard
             key={loc.value}
+            compact
             label={loc.label}
             selected={stairs.location === loc.value}
             onClick={() =>
@@ -41,7 +39,7 @@ export default function StairsStep() {
       </div>
 
       {stairs.location !== "none" && (
-        <div className="mt-6 max-w-xs">
+        <div className="mt-4 max-w-[160px]">
           <NumberInput
             label="Stair width"
             value={stairs.width}

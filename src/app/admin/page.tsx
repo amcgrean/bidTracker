@@ -49,6 +49,13 @@ function getValue(row: string[], col: Record<string, number>, ...keys: string[])
   return "";
 }
 
+function cleanImportCell(value: string): string {
+  return value
+    .replace(/\u00c2(?=\u00a0)/g, "")
+    .replace(/\u00a0/g, " ")
+    .trim();
+}
+
 function parseDeckingCategory(raw: string): "wood" | "composite" {
   const normalized = raw.toLowerCase();
   return normalized.includes("composite") ? "composite" : "wood";
@@ -62,6 +69,13 @@ function parseCsvRows(text: string): string[][] {
   const firstLine = normalizedText.split(/\r?\n/, 1)[0] ?? "";
   const delimiter = firstLine.includes("\t") ? "\t" : ",";
 
+  if (delimiter === "\t") {
+    return normalizedText
+      .split(/\r?\n/)
+      .map((line) => line.split("\t").map((cell) => cleanImportCell(cell)))
+      .filter((row) => row.some((v) => v.length > 0));
+  }
+
   const rows: string[][] = [];
   let row: string[] = [];
   let cell = "";
@@ -74,6 +88,11 @@ function parseCsvRows(text: string): string[][] {
       if (inQuotes && normalizedText[i + 1] === '"') {
         cell += '"';
         i++;
+        continue;
+      }
+
+      if (!inQuotes && cell.length > 0) {
+        cell += char;
       } else {
         inQuotes = !inQuotes;
       }
@@ -81,14 +100,14 @@ function parseCsvRows(text: string): string[][] {
     }
 
     if (!inQuotes && char === delimiter) {
-      row.push(cell.trim());
+      row.push(cleanImportCell(cell));
       cell = "";
       continue;
     }
 
     if (!inQuotes && (char === "\n" || char === "\r")) {
       if (char === "\r" && normalizedText[i + 1] === "\n") i++;
-      row.push(cell.trim());
+      row.push(cleanImportCell(cell));
       if (row.some((v) => v.length > 0)) rows.push(row);
       row = [];
       cell = "";
@@ -99,7 +118,7 @@ function parseCsvRows(text: string): string[][] {
   }
 
   if (cell.length > 0 || row.length > 0) {
-    row.push(cell.trim());
+    row.push(cleanImportCell(cell));
     if (row.some((v) => v.length > 0)) rows.push(row);
   }
 

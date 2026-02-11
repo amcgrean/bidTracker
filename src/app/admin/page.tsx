@@ -62,9 +62,13 @@ function parseDeckingCategory(raw: string): "wood" | "composite" {
 }
 
 function parseCsvRows(text: string): string[][] {
-  const normalizedText = text.includes("\\n") && !text.includes("\n")
+  const normalizedNewlines = text.includes("\\n") && !text.includes("\n")
     ? text.replace(/\\n/g, "\n")
     : text;
+
+  const normalizedText = normalizedNewlines.includes("\\t") && !normalizedNewlines.includes("\t")
+    ? normalizedNewlines.replace(/\\t/g, "\t")
+    : normalizedNewlines;
 
   const firstLine = normalizedText.split(/\r?\n/, 1)[0] ?? "";
   const delimiter = firstLine.includes("\t") ? "\t" : ",";

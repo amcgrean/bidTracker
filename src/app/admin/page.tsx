@@ -33,34 +33,85 @@ interface Setting {
 }
 
 
+
+function normalizeHeader(header: string): string {
+  return header.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function getValue(row: string[], col: Record<string, number>, ...keys: string[]): string {
+  for (const key of keys) {
+    const idx = col[normalizeHeader(key)];
+    if (idx !== undefined) {
+      const value = row[idx] ?? "";
+      if (value !== "") return value;
+    }
+  }
+  return "";
+}
+
+function cleanImportCell(value: string): string {
+  return value
+    .replace(/\u00c2(?=\u00a0)/g, "")
+    .replace(/\u00a0/g, " ")
+    .trim();
+}
+
+function parseDeckingCategory(raw: string): "wood" | "composite" {
+  const normalized = raw.toLowerCase();
+  return normalized.includes("composite") ? "composite" : "wood";
+}
+
 function parseCsvRows(text: string): string[][] {
+  const normalizedNewlines = text.includes("\\n") && !text.includes("\n")
+    ? text.replace(/\\n/g, "\n")
+    : text;
+
+  const normalizedText = normalizedNewlines.includes("\\t") && !normalizedNewlines.includes("\t")
+    ? normalizedNewlines.replace(/\\t/g, "\t")
+    : normalizedNewlines;
+
+  const firstLine = normalizedText.split(/\r?\n/, 1)[0] ?? "";
+  const delimiter = firstLine.includes("\t") ? "\t" : ",";
+
+  if (delimiter === "\t") {
+    return normalizedText
+      .split(/\r?\n/)
+      .map((line) => line.split("\t").map((cell) => cleanImportCell(cell)))
+      .filter((row) => row.some((v) => v.length > 0));
+  }
+
   const rows: string[][] = [];
   let row: string[] = [];
   let cell = "";
   let inQuotes = false;
 
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
+  for (let i = 0; i < normalizedText.length; i++) {
+    const char = normalizedText[i];
 
     if (char === '"') {
-      if (inQuotes && text[i + 1] === '"') {
+      if (inQuotes && normalizedText[i + 1] === '"') {
         cell += '"';
         i++;
+        continue;
+      }
+
+      if (!inQuotes && cell.length > 0) {
+        cell += char;
       } else {
         inQuotes = !inQuotes;
       }
       continue;
     }
 
-    if (!inQuotes && char === ',') {
-      row.push(cell.trim());
+    if (!inQuotes && char === delimiter) {
+      row.push(cleanImportCell(cell));
       cell = "";
       continue;
     }
 
     if (!inQuotes && (char === "\n" || char === "\r")) {
-      if (char === "\r" && text[i + 1] === "\n") i++;
-      row.push(cell.trim());
+      if (char === "\r" && normalizedText[i + 1] === "\n") i++;
+      row.push(cleanImportCell(cell));
       if (row.some((v) => v.length > 0)) rows.push(row);
       row = [];
       cell = "";
@@ -71,7 +122,7 @@ function parseCsvRows(text: string): string[][] {
   }
 
   if (cell.length > 0 || row.length > 0) {
-    row.push(cell.trim());
+    row.push(cleanImportCell(cell));
     if (row.some((v) => v.length > 0)) rows.push(row);
   }
 
@@ -283,19 +334,37 @@ function DeckingTable({
     if (rows.length < 2) return;
 
     const [header, ...body] = rows;
-    const col = Object.fromEntries(header.map((h, i) => [h.trim().toLowerCase(), i]));
+    const col = Object.fromEntries(header.map((h, i) => [normalizeHeader(h), i]));
 
     const parsed = body
       .filter((r) => r.length > 0)
-      .map((r, idx) => ({
-        id: r[col.id] ?? `decking-${idx + 1}`,
-        category: (r[col.category] ?? "composite") || "composite",
-        label: r[col.label] ?? "",
-        description: r[col.description] ?? "",
-        cost_per_sqft: Number(r[col.cost_per_sqft] ?? r[col.cost] ?? 0),
-        active: Number(r[col.active] ?? 1) ? 1 : 0,
-        sort_order: Number(r[col.sort_order] ?? idx),
-      }))
+      .map((r, idx) => {
+        const item = getValue(r, col, "id", "item", "sku", "vendorsku");
+        const major = getValue(r, col, "major_description", "major description", "category");
+        const minor = getValue(r, col, "minor_description", "minor description", "subcategory");
+        const ext = getValue(r, col, "ext_description", "ext description", "brand", "vendor");
+        const description = getValue(r, col, "description", "label");
+        const size = getValue(r, col, "size_", "size", "dimensions");
+        const category = parseDeckingCategory(major || getValue(r, col, "deckingCategory", "type", "category"));
+
+        const id = item || `decking-${idx + 1}`;
+        const labelBase = description || item;
+        const label = ext && labelBase && !labelBase.toLowerCase().includes(ext.toLowerCase())
+          ? `${ext} — ${labelBase}`
+          : (labelBase || ext || item);
+
+        const detailParts = [major, minor, size].filter(Boolean);
+
+        return {
+          id,
+          category,
+          label,
+          description: detailParts.length > 0 ? `${detailParts.join(" • ")}${description ? ` — ${description}` : ""}` : description,
+          cost_per_sqft: Number(getValue(r, col, "cost_per_sqft", "cost", "costpersqft") || 0),
+          active: Number(getValue(r, col, "active") || 1) ? 1 : 0,
+          sort_order: Number(getValue(r, col, "sort_order", "sortorder") || idx),
+        };
+      })
       .filter((r) => r.id && r.label);
 
     await onImport(parsed);
@@ -319,7 +388,7 @@ function DeckingTable({
         <div className="flex items-center gap-2">
           <label className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer">
             Import CSV
-            <input type="file" accept=".csv,text/csv" className="hidden" onChange={handleImport} />
+            <input type="file" accept=".csv,text/csv,.txt,text/tab-separated-values" className="hidden" onChange={handleImport} />
           </label>
           <button
             onClick={() => setEditing(emptyProduct)}
@@ -587,7 +656,7 @@ function RailingTable({
         <div className="flex items-center gap-2">
           <label className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer">
             Import CSV
-            <input type="file" accept=".csv,text/csv" className="hidden" onChange={handleImport} />
+            <input type="file" accept=".csv,text/csv,.txt,text/tab-separated-values" className="hidden" onChange={handleImport} />
           </label>
           <button
             onClick={() => setEditing(emptyProduct)}

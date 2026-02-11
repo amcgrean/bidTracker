@@ -14,20 +14,24 @@ The core structure is in place: a step-by-step wizard on the left, a live 2D can
 
 ### Decking
 - **Wood:** Pressure-treated lumber, Cedar
-- **Composite:** Trex, TimberTech / AZEK, Deckorators
+- **Composite:** Trex, TimberTech / AZEK, Deckorators, Wolf Home Products, MoistureShield
 
 ### Railing
-- **Wood** railing (standard/generic)
-- **Metal / Aluminum** — Westbury (primary), Deckorators, Trex, TimberTech
-- **Glass panel** — Westbury ScreenRail and similar
+- **Wood** railing (standard)
+- **Cedar** railing (gripable, rustic look)
+- **Metal / Aluminum** — Westbury (primary), Deckorators, Trex, TimberTech, Wolf, DekPro
+- **Glass panel** — Westbury Veranda / ScreenRail
 
 ### Key Brands
 | Brand | Products We Carry |
 |-------|-------------------|
-| Trex | Composite decking (Transcend, Enhance, Select), railing |
+| Trex | Composite decking (Transcend, Enhance, Select), aluminum railing |
 | TimberTech / AZEK | Composite & PVC decking, RadianceRail railing |
-| Deckorators | Mineral-based composite decking, ALX/CXT railing |
-| Westbury | Aluminum railing (Tuscany series), glass panel railing (ScreenRail) |
+| Deckorators | Mineral-based composite decking (Surestone), ALX/CXT railing |
+| Wolf Home Products | Serenity & Perspective composite decking, Wolf Railing |
+| MoistureShield | Composite decking for wet/pool environments |
+| Westbury | Aluminum railing (C10, Tuscany), glass panel railing (Veranda) |
+| DekPro | Distinctive baluster designs and railing accessories |
 
 ## Objectives
 
@@ -71,7 +75,7 @@ The core structure is in place: a step-by-step wizard on the left, a live 2D can
 | Styling | Tailwind CSS v4 |
 | 2D Rendering | HTML Canvas API |
 | State Management | React Context + useReducer |
-| Hosting target | GitHub Pages or Vercel |
+| Hosting | Vercel |
 
 ## Project Structure
 
@@ -121,8 +125,21 @@ src/
 - **Lumber length optimization:** The material list currently estimates square footage. A more useful output would map to actual board counts at standard lumber lengths (8', 10', 12', 16') to minimize waste.
 - **Board-level rendering:** The canvas currently draws boards as alternating-color stripes. Rendering each board individually with realistic gaps, end joints, and staggering is a key visual improvement.
 - **Export formats:** PDF is the obvious first target. Should we also support CSV (for spreadsheet import) or a structured JSON format?
-- **Hosting:** GitHub Pages (static export) vs. Vercel (SSR capable). The MVP is fully static, so either works. Vercel simplifies deployment with preview URLs per PR.
+- **Hosting:** Vercel is the plan. The MVP is fully static, so deployment is straightforward with automatic preview URLs per PR.
 - **Should we support metric units?** Currently feet-only. Adding metric would require a unit toggle and conversion layer.
+
+## Deployment (Vercel)
+
+This app is designed to deploy on [Vercel](https://vercel.com). To set it up:
+
+1. **Connect the repo:** Go to [vercel.com/new](https://vercel.com/new), import the `amcgrean/bidTracker` GitHub repo.
+2. **Framework detection:** Vercel auto-detects Next.js — no special config needed.
+3. **Deploy:** Click "Deploy". Vercel will build and host the app with a `.vercel.app` URL.
+4. **Preview deployments:** Every push to a branch automatically gets a unique preview URL.
+5. **Custom domain (optional):** Add a custom domain in Vercel project settings if desired.
+
+### Environment
+No environment variables or secrets are needed for the MVP — it's fully client-side.
 
 ## Development
 

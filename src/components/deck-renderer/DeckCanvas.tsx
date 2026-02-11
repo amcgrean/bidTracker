@@ -52,6 +52,8 @@ function drawDeckBoards(
     "composite-trex": "#8b7355",
     "composite-timbertech": "#7a6a50",
     "composite-deckorators": "#917b5e",
+    "composite-wolf": "#a08868",
+    "composite-moistureshield": "#7d6e5a",
   };
   const color = boardColors[config.material] ?? "#c4a56e";
 
@@ -110,6 +112,7 @@ function drawRailing(
 
   const railColors: Record<string, string> = {
     wood: "#8B4513",
+    cedar: "#b5651d",
     metal: "#333",
     glass: "#88bbdd",
   };

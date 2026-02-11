@@ -55,16 +55,23 @@ function parseDeckingCategory(raw: string): "wood" | "composite" {
 }
 
 function parseCsvRows(text: string): string[][] {
+  const normalizedText = text.includes("\\n") && !text.includes("\n")
+    ? text.replace(/\\n/g, "\n")
+    : text;
+
+  const firstLine = normalizedText.split(/\r?\n/, 1)[0] ?? "";
+  const delimiter = firstLine.includes("\t") ? "\t" : ",";
+
   const rows: string[][] = [];
   let row: string[] = [];
   let cell = "";
   let inQuotes = false;
 
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
+  for (let i = 0; i < normalizedText.length; i++) {
+    const char = normalizedText[i];
 
     if (char === '"') {
-      if (inQuotes && text[i + 1] === '"') {
+      if (inQuotes && normalizedText[i + 1] === '"') {
         cell += '"';
         i++;
       } else {
@@ -73,14 +80,14 @@ function parseCsvRows(text: string): string[][] {
       continue;
     }
 
-    if (!inQuotes && char === ',') {
+    if (!inQuotes && char === delimiter) {
       row.push(cell.trim());
       cell = "";
       continue;
     }
 
     if (!inQuotes && (char === "\n" || char === "\r")) {
-      if (char === "\r" && text[i + 1] === "\n") i++;
+      if (char === "\r" && normalizedText[i + 1] === "\n") i++;
       row.push(cell.trim());
       if (row.some((v) => v.length > 0)) rows.push(row);
       row = [];

@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import fs from "fs";
 import path from "path";
 import {
   CREATE_TABLES_SQL,
@@ -7,19 +8,36 @@ import {
   SEED_SETTINGS,
 } from "./schema";
 
-const DB_PATH = path.join(process.cwd(), "data", "deck-configurator.db");
+const DEFAULT_DB_FILENAME = "deck-configurator.db";
 
 let _db: Database.Database | null = null;
+
+function resolveDbPath(): string {
+  const explicitPath = process.env.DECK_DB_PATH || process.env.DATABASE_PATH;
+  if (explicitPath) {
+    const explicitDir = path.dirname(explicitPath);
+    if (!fs.existsSync(explicitDir)) fs.mkdirSync(explicitDir, { recursive: true });
+    return explicitPath;
+  }
+
+  const localPath = path.join(process.cwd(), "data", DEFAULT_DB_FILENAME);
+  try {
+    const localDir = path.dirname(localPath);
+    if (!fs.existsSync(localDir)) fs.mkdirSync(localDir, { recursive: true });
+    return localPath;
+  } catch {
+    const tempPath = path.join("/tmp", DEFAULT_DB_FILENAME);
+    const tempDir = path.dirname(tempPath);
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+    return tempPath;
+  }
+}
 
 export function getDb(): Database.Database {
   if (_db) return _db;
 
-  // Ensure data directory exists
-  const fs = require("fs");
-  const dir = path.dirname(DB_PATH);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-
-  _db = new Database(DB_PATH);
+  const dbPath = resolveDbPath();
+  _db = new Database(dbPath);
   _db.pragma("journal_mode = WAL");
   _db.pragma("foreign_keys = ON");
 
@@ -167,4 +185,54 @@ export function updateSetting(key: string, value: string) {
   getDb()
     .prepare("UPDATE estimate_settings SET value = ? WHERE key = ?")
     .run(value, key);
+}
+
+export interface QuoteRow {
+  id: number;
+  quote_number: string;
+  quote_name: string;
+  notes: string;
+  config_json: string;
+  created_at: string;
+  updated_at: string;
+}
+
+function generateQuoteNumber(): string {
+  const now = new Date();
+  const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+  const suffix = Math.floor(1000 + Math.random() * 9000);
+  return `Q-${stamp}-${suffix}`;
+}
+
+export function listQuotes(): Pick<QuoteRow, "id" | "quote_number" | "quote_name" | "updated_at">[] {
+  return getDb()
+    .prepare("SELECT id, quote_number, quote_name, updated_at FROM quotes ORDER BY datetime(updated_at) DESC")
+    .all() as Pick<QuoteRow, "id" | "quote_number" | "quote_name" | "updated_at">[];
+}
+
+export function getQuote(id: number): QuoteRow | undefined {
+  return getDb().prepare("SELECT * FROM quotes WHERE id = ?").get(id) as QuoteRow | undefined;
+}
+
+export function saveQuote(payload: { id?: number; quoteName: string; notes: string; configJson: string; quoteNumber?: string }) {
+  const db = getDb();
+  const quoteNumber = payload.quoteNumber || generateQuoteNumber();
+  if (payload.id) {
+    db.prepare(
+      `UPDATE quotes
+       SET quote_name = @quote_name,
+           notes = @notes,
+           config_json = @config_json,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = @id`,
+    ).run({ id: payload.id, quote_name: payload.quoteName, notes: payload.notes, config_json: payload.configJson });
+    return { id: payload.id, quoteNumber };
+  }
+
+  const result = db.prepare(
+    `INSERT INTO quotes (quote_number, quote_name, notes, config_json)
+     VALUES (@quote_number, @quote_name, @notes, @config_json)`,
+  ).run({ quote_number: quoteNumber, quote_name: payload.quoteName, notes: payload.notes, config_json: payload.configJson });
+
+  return { id: Number(result.lastInsertRowid), quoteNumber };
 }

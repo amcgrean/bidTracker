@@ -30,6 +30,8 @@ export type BeamType = "dropped" | "flush";
 
 export type StairLocation = "none" | "front" | "back" | "left" | "right";
 
+export type ExteriorFacade = "vinyl" | "brick" | "stone" | "stucco" | "wood";
+
 export interface DeckDimensions {
   /** Primary width in feet */
   width: number;
@@ -60,6 +62,14 @@ export interface DeckConfig {
   beamType: BeamType;
   stairs: StairConfig;
   ledgerAttached: boolean; // attached to house on one side?
+  quoteName: string;
+  quoteNotes: string;
+  quoteNumber?: string;
+  hasHouse: boolean;
+  exteriorFacade: ExteriorFacade;
+  houseColor: string;
+  patioDoor: boolean;
+  showGrass: boolean;
 }
 
 export interface MaterialItem {
@@ -108,4 +118,11 @@ export const DEFAULT_DECK_CONFIG: DeckConfig = {
   beamType: "dropped",
   stairs: { location: "front", width: 4 },
   ledgerAttached: true,
+  quoteName: "",
+  quoteNotes: "",
+  hasHouse: true,
+  exteriorFacade: "vinyl",
+  houseColor: "#d5d0c8",
+  patioDoor: false,
+  showGrass: false,
 };

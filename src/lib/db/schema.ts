@@ -35,7 +35,18 @@ export const CREATE_TABLES_SQL = `
     label TEXT NOT NULL DEFAULT '',
     description TEXT NOT NULL DEFAULT ''
   );
-`;
+
+  CREATE TABLE IF NOT EXISTS quotes (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    quote_number  TEXT NOT NULL UNIQUE,
+    quote_name    TEXT NOT NULL DEFAULT '',
+    notes         TEXT NOT NULL DEFAULT '',
+    config_json   TEXT NOT NULL,
+    created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+`
+;
 
 /** Seed data matching the current hardcoded product catalog */
 export const SEED_DECKING = [

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 
 // ─── Types matching the DB rows ──────────────────────────────────────────────
 
@@ -31,6 +32,154 @@ interface Setting {
   description: string;
 }
 
+
+
+function normalizeHeader(header: string): string {
+  return header.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function getValue(row: string[], col: Record<string, number>, ...keys: string[]): string {
+  for (const key of keys) {
+    const idx = col[normalizeHeader(key)];
+    if (idx !== undefined) {
+      const value = row[idx] ?? "";
+      if (value !== "") return value;
+    }
+  }
+  return "";
+}
+
+function cleanImportCell(value: string): string {
+  return value
+    .replace(/\u00c2(?=\u00a0)/g, "")
+    .replace(/\u00a0/g, " ")
+    .trim();
+}
+
+function parseDeckingCategory(raw: string): "wood" | "composite" {
+  const normalized = raw.toLowerCase();
+  return normalized.includes("composite") ? "composite" : "wood";
+}
+
+const RAILING_KEYWORDS = [
+  "railing",
+  "baluster",
+  "rail kit",
+  "stair rail",
+  "post sleeve",
+  "post cap",
+  "post skirt",
+  "gate",
+  "infill",
+  "handrail",
+  "privacy screen",
+];
+
+const ACCESSORY_KEYWORDS = [
+  "screw",
+  "screws",
+  "fastener",
+  "fasteners",
+  "clip",
+  "clips",
+  "bracket",
+  "brackets",
+  "connector",
+  "bit",
+  "driver",
+  "adhesive",
+  "transformer",
+  "light",
+  "wire",
+  "harness",
+  "hanger",
+  "hardware",
+  "splitter",
+];
+
+function classifyImportKind(...parts: string[]): "decking" | "railing" | "accessory" {
+  const text = parts.filter(Boolean).join(" ").toLowerCase();
+  if (RAILING_KEYWORDS.some((keyword) => text.includes(keyword))) return "railing";
+  if (ACCESSORY_KEYWORDS.some((keyword) => text.includes(keyword))) return "accessory";
+  return "decking";
+}
+
+function parseRailingType(raw: string): "wood" | "cedar" | "metal" | "glass" {
+  const normalized = raw.toLowerCase();
+  if (normalized.includes("glass")) return "glass";
+  if (normalized.includes("cedar")) return "cedar";
+  if (normalized.includes("wood")) return "wood";
+  return "metal";
+}
+
+function parseCsvRows(text: string): string[][] {
+  const normalizedNewlines = text.includes("\\n") && !text.includes("\n")
+    ? text.replace(/\\n/g, "\n")
+    : text;
+
+  const normalizedText = normalizedNewlines.includes("\\t") && !normalizedNewlines.includes("\t")
+    ? normalizedNewlines.replace(/\\t/g, "\t")
+    : normalizedNewlines;
+
+  const firstLine = normalizedText.split(/\r?\n/, 1)[0] ?? "";
+  const delimiter = firstLine.includes("\t") ? "\t" : ",";
+
+  if (delimiter === "\t") {
+    return normalizedText
+      .split(/\r?\n/)
+      .map((line) => line.split("\t").map((cell) => cleanImportCell(cell)))
+      .filter((row) => row.some((v) => v.length > 0));
+  }
+
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < normalizedText.length; i++) {
+    const char = normalizedText[i];
+
+    if (char === '"') {
+      if (inQuotes && normalizedText[i + 1] === '"') {
+        cell += '"';
+        i++;
+        continue;
+      }
+
+      if (!inQuotes && cell.length > 0) {
+        cell += char;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (!inQuotes && char === delimiter) {
+      row.push(cleanImportCell(cell));
+      cell = "";
+      continue;
+    }
+
+    if (!inQuotes && (char === "\n" || char === "\r")) {
+      if (char === "\r" && normalizedText[i + 1] === "\n") i++;
+      row.push(cleanImportCell(cell));
+      if (row.some((v) => v.length > 0)) rows.push(row);
+      row = [];
+      cell = "";
+      continue;
+    }
+
+    cell += char;
+  }
+
+  if (cell.length > 0 || row.length > 0) {
+    row.push(cleanImportCell(cell));
+    if (row.some((v) => v.length > 0)) rows.push(row);
+  }
+
+  return rows;
+}
+
 // ─── Admin page ──────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
@@ -40,23 +189,27 @@ export default function AdminPage() {
   const [settings, setSettings] = useState<Setting[]>([]);
   const [saving, setSaving] = useState(false);
 
-  const loadProducts = useCallback(async () => {
+  async function loadProducts() {
     const res = await fetch("/api/admin/products");
     const data = await res.json();
     setDecking(data.decking);
     setRailing(data.railing);
-  }, []);
+  }
 
-  const loadSettings = useCallback(async () => {
+  async function loadSettings() {
     const res = await fetch("/api/admin/settings");
     const data = await res.json();
     setSettings(data.settings);
-  }, []);
+  }
 
   useEffect(() => {
-    loadProducts();
-    loadSettings();
-  }, [loadProducts, loadSettings]);
+    const timer = window.setTimeout(() => {
+      void loadProducts();
+      void loadSettings();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, []);
 
   // ── Save helpers ──
 
@@ -68,7 +221,7 @@ export default function AdminPage() {
       body: JSON.stringify({ table: "decking", ...product }),
     });
     setSaving(false);
-    loadProducts();
+    void loadProducts();
   }
 
   async function saveRailingProduct(product: RailingProduct) {
@@ -79,15 +232,19 @@ export default function AdminPage() {
       body: JSON.stringify({ table: "railing", ...product }),
     });
     setSaving(false);
-    loadProducts();
+    void loadProducts();
   }
 
-  async function deleteDeckingProduct(id: string) {
-    if (!confirm(`Delete decking product "${id}"?`)) return;
+  async function deleteDeckingProductById(id: string, skipConfirm = false) {
+    if (!skipConfirm && !confirm(`Delete decking product "${id}"?`)) return;
     await fetch(`/api/admin/products?table=decking&id=${encodeURIComponent(id)}`, {
       method: "DELETE",
     });
-    loadProducts();
+  }
+
+  async function deleteDeckingProduct(id: string) {
+    await deleteDeckingProductById(id);
+    void loadProducts();
   }
 
   async function deleteRailingProduct(id: string) {
@@ -95,7 +252,7 @@ export default function AdminPage() {
     await fetch(`/api/admin/products?table=railing&id=${encodeURIComponent(id)}`, {
       method: "DELETE",
     });
-    loadProducts();
+    void loadProducts();
   }
 
   async function saveSetting(key: string, value: string) {
@@ -106,7 +263,74 @@ export default function AdminPage() {
       body: JSON.stringify({ key, value }),
     });
     setSaving(false);
-    loadSettings();
+    void loadSettings();
+  }
+
+  async function importDeckingProducts(products: DeckingProduct[]) {
+    setSaving(true);
+    for (const product of products) {
+      await fetch("/api/admin/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ table: "decking", ...product }),
+      });
+    }
+    setSaving(false);
+    void loadProducts();
+  }
+
+  async function importRailingProducts(products: RailingProduct[]) {
+    setSaving(true);
+    for (const product of products) {
+      await fetch("/api/admin/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ table: "railing", ...product }),
+      });
+    }
+    setSaving(false);
+    void loadProducts();
+  }
+
+  async function autoSortImportedDecking() {
+    const migrations = decking
+      .map((product, idx) => {
+        const kind = classifyImportKind(product.id, product.label, product.description);
+        if (kind !== "railing") return null;
+
+        return {
+          deckingId: product.id,
+          railing: {
+            id: product.id,
+            type: parseRailingType(`${product.label} ${product.description}`),
+            label: product.label,
+            description: product.description,
+            cost_per_lf: 0,
+            active: product.active,
+            sort_order: idx,
+          } satisfies RailingProduct,
+        };
+      })
+      .filter((item): item is { deckingId: string; railing: RailingProduct } => item !== null);
+
+    if (migrations.length === 0) {
+      alert("No obvious railing items were found in decking products.");
+      return;
+    }
+
+    if (!confirm(`Move ${migrations.length} likely railing items from Decking to Railing?`)) return;
+
+    setSaving(true);
+    for (const item of migrations) {
+      await fetch("/api/admin/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ table: "railing", ...item.railing }),
+      });
+      await deleteDeckingProductById(item.deckingId, true);
+    }
+    setSaving(false);
+    void loadProducts();
   }
 
   return (
@@ -121,12 +345,12 @@ export default function AdminPage() {
               Manage products, pricing, and estimator settings
             </p>
           </div>
-          <a
+          <Link
             href="/"
             className="text-sm text-blue-600 hover:text-blue-800"
           >
             Back to Configurator
-          </a>
+          </Link>
         </div>
       </header>
 
@@ -161,6 +385,9 @@ export default function AdminPage() {
             products={decking}
             onSave={saveDeckingProduct}
             onDelete={deleteDeckingProduct}
+            onImport={importDeckingProducts}
+            onImportRailing={importRailingProducts}
+            onAutoSort={autoSortImportedDecking}
           />
         )}
 
@@ -169,6 +396,7 @@ export default function AdminPage() {
             products={railing}
             onSave={saveRailingProduct}
             onDelete={deleteRailingProduct}
+            onImport={importRailingProducts}
           />
         )}
 
@@ -186,12 +414,100 @@ function DeckingTable({
   products,
   onSave,
   onDelete,
+  onImport,
+  onImportRailing,
+  onAutoSort,
 }: {
   products: DeckingProduct[];
   onSave: (p: DeckingProduct) => void;
   onDelete: (id: string) => void;
+  onImport: (products: DeckingProduct[]) => Promise<void>;
+  onImportRailing: (products: RailingProduct[]) => Promise<void>;
+  onAutoSort: () => Promise<void>;
 }) {
   const [editing, setEditing] = useState<DeckingProduct | null>(null);
+
+  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const text = await file.text();
+    const rows = parseCsvRows(text);
+    if (rows.length < 2) return;
+
+    const [header, ...body] = rows;
+    const col = Object.fromEntries(header.map((h, i) => [normalizeHeader(h), i]));
+
+    const parsed = body
+      .filter((r) => r.length > 0)
+      .map((r, idx) => {
+        const item = getValue(r, col, "id", "item", "sku", "vendorsku");
+        const major = getValue(r, col, "major_description", "major description", "category");
+        const minor = getValue(r, col, "minor_description", "minor description", "subcategory");
+        const ext = getValue(r, col, "ext_description", "ext description", "brand", "vendor");
+        const description = getValue(r, col, "description", "label");
+        const size = getValue(r, col, "size_", "size", "dimensions");
+        const category = parseDeckingCategory(major || getValue(r, col, "deckingCategory", "type", "category"));
+
+        const id = item || `decking-${idx + 1}`;
+        const labelBase = description || item;
+        const label = ext && labelBase && !labelBase.toLowerCase().includes(ext.toLowerCase())
+          ? `${ext} — ${labelBase}`
+          : (labelBase || ext || item);
+
+        const detailParts = [major, minor, size].filter(Boolean);
+        const fullDescription = detailParts.length > 0
+          ? `${detailParts.join(" • ")}${description ? ` — ${description}` : ""}`
+          : description;
+        const kind = classifyImportKind(major, minor, label, fullDescription, ext, item);
+
+        return {
+          kind,
+          id,
+          category,
+          label,
+          description: kind === "accessory" ? `Accessory/Misc • ${fullDescription}` : fullDescription,
+          cost_per_sqft: Number(getValue(r, col, "cost_per_sqft", "cost", "costpersqft") || 0),
+          active: Number(getValue(r, col, "active") || 1) ? 1 : 0,
+          sort_order: Number(getValue(r, col, "sort_order", "sortorder") || idx),
+          railingType: parseRailingType(`${major} ${minor} ${label} ${fullDescription}`),
+        };
+      })
+      .filter((r) => r.id && r.label);
+
+    const deckingProducts = parsed
+      .filter((row) => row.kind !== "railing")
+      .map((row) => ({
+        id: row.id,
+        category: row.category,
+        label: row.label,
+        description: row.description,
+        cost_per_sqft: row.cost_per_sqft,
+        active: row.active,
+        sort_order: row.sort_order,
+      }));
+
+    const railingProducts = parsed
+      .filter((row) => row.kind === "railing")
+      .map((row) => ({
+        id: row.id,
+        type: row.railingType,
+        label: row.label,
+        description: row.description,
+        cost_per_lf: 0,
+        active: row.active,
+        sort_order: row.sort_order,
+      }));
+
+    if (deckingProducts.length > 0) await onImport(deckingProducts);
+    if (railingProducts.length > 0) await onImportRailing(railingProducts);
+
+    if (railingProducts.length > 0) {
+      alert(`Imported ${deckingProducts.length} decking rows and auto-routed ${railingProducts.length} railing rows.`);
+    }
+
+    e.currentTarget.value = "";
+  }
 
   const emptyProduct: DeckingProduct = {
     id: "",
@@ -207,12 +523,24 @@ function DeckingTable({
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-gray-800">Decking Products</h2>
-        <button
-          onClick={() => setEditing(emptyProduct)}
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
-        >
-          Add Product
-        </button>
+        <div className="flex items-center gap-2">
+          <label className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer">
+            Import CSV
+            <input type="file" accept=".csv,text/csv,.txt,text/tab-separated-values" className="hidden" onChange={handleImport} />
+          </label>
+          <button
+            onClick={() => void onAutoSort()}
+            className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 hover:bg-amber-100"
+          >
+            Auto-Sort Existing Rows
+          </button>
+          <button
+            onClick={() => setEditing(emptyProduct)}
+            className="rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
+          >
+            Add Product
+          </button>
+        </div>
       </div>
 
       <div className="overflow-x-auto bg-white rounded-lg border border-gray-200">
@@ -418,12 +746,42 @@ function RailingTable({
   products,
   onSave,
   onDelete,
+  onImport,
 }: {
   products: RailingProduct[];
   onSave: (p: RailingProduct) => void;
   onDelete: (id: string) => void;
+  onImport: (products: RailingProduct[]) => Promise<void>;
 }) {
   const [editing, setEditing] = useState<RailingProduct | null>(null);
+
+  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const text = await file.text();
+    const rows = parseCsvRows(text);
+    if (rows.length < 2) return;
+
+    const [header, ...body] = rows;
+    const col = Object.fromEntries(header.map((h, i) => [h.trim().toLowerCase(), i]));
+
+    const parsed = body
+      .filter((r) => r.length > 0)
+      .map((r, idx) => ({
+        id: r[col.id] ?? `railing-${idx + 1}`,
+        type: (r[col.type] ?? "metal") || "metal",
+        label: r[col.label] ?? "",
+        description: r[col.description] ?? "",
+        cost_per_lf: Number(r[col.cost_per_lf] ?? r[col.cost] ?? 0),
+        active: Number(r[col.active] ?? 1) ? 1 : 0,
+        sort_order: Number(r[col.sort_order] ?? idx),
+      }))
+      .filter((r) => r.id && r.label);
+
+    await onImport(parsed);
+    e.currentTarget.value = "";
+  }
 
   const emptyProduct: RailingProduct = {
     id: "",
@@ -439,12 +797,18 @@ function RailingTable({
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-gray-800">Railing Products</h2>
-        <button
-          onClick={() => setEditing(emptyProduct)}
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
-        >
-          Add Product
-        </button>
+        <div className="flex items-center gap-2">
+          <label className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer">
+            Import CSV
+            <input type="file" accept=".csv,text/csv,.txt,text/tab-separated-values" className="hidden" onChange={handleImport} />
+          </label>
+          <button
+            onClick={() => setEditing(emptyProduct)}
+            className="rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
+          >
+            Add Product
+          </button>
+        </div>
       </div>
 
       <div className="overflow-x-auto bg-white rounded-lg border border-gray-200">

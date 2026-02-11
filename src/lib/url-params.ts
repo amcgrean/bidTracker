@@ -24,6 +24,14 @@ export function configToParams(config: DeckConfig): URLSearchParams {
   p.set("sl", config.stairs.location);
   p.set("sw", String(config.stairs.width));
   p.set("la", config.ledgerAttached ? "1" : "0");
+  p.set("qn", config.quoteName);
+  p.set("qnote", config.quoteNotes);
+  if (config.quoteNumber) p.set("qnum", config.quoteNumber);
+  p.set("hh", config.hasHouse ? "1" : "0");
+  p.set("fac", config.exteriorFacade);
+  p.set("hc", config.houseColor);
+  p.set("pd", config.patioDoor ? "1" : "0");
+  p.set("gr", config.showGrass ? "1" : "0");
   return p;
 }
 
@@ -72,5 +80,13 @@ export function paramsToConfig(params: URLSearchParams): DeckConfig | null {
       width: Number(params.get("sw")) || def.stairs.width,
     },
     ledgerAttached: params.get("la") === "0" ? false : def.ledgerAttached,
+    quoteName: params.get("qn") ?? def.quoteName,
+    quoteNotes: params.get("qnote") ?? def.quoteNotes,
+    quoteNumber: params.get("qnum") || undefined,
+    hasHouse: params.get("hh") === "0" ? false : def.hasHouse,
+    exteriorFacade: (params.get("fac") as DeckConfig["exteriorFacade"]) ?? def.exteriorFacade,
+    houseColor: params.get("hc") ?? def.houseColor,
+    patioDoor: params.get("pd") === "1",
+    showGrass: params.get("gr") === "1",
   };
 }

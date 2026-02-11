@@ -186,3 +186,53 @@ export function updateSetting(key: string, value: string) {
     .prepare("UPDATE estimate_settings SET value = ? WHERE key = ?")
     .run(value, key);
 }
+
+export interface QuoteRow {
+  id: number;
+  quote_number: string;
+  quote_name: string;
+  notes: string;
+  config_json: string;
+  created_at: string;
+  updated_at: string;
+}
+
+function generateQuoteNumber(): string {
+  const now = new Date();
+  const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+  const suffix = Math.floor(1000 + Math.random() * 9000);
+  return `Q-${stamp}-${suffix}`;
+}
+
+export function listQuotes(): Pick<QuoteRow, "id" | "quote_number" | "quote_name" | "updated_at">[] {
+  return getDb()
+    .prepare("SELECT id, quote_number, quote_name, updated_at FROM quotes ORDER BY datetime(updated_at) DESC")
+    .all() as Pick<QuoteRow, "id" | "quote_number" | "quote_name" | "updated_at">[];
+}
+
+export function getQuote(id: number): QuoteRow | undefined {
+  return getDb().prepare("SELECT * FROM quotes WHERE id = ?").get(id) as QuoteRow | undefined;
+}
+
+export function saveQuote(payload: { id?: number; quoteName: string; notes: string; configJson: string; quoteNumber?: string }) {
+  const db = getDb();
+  const quoteNumber = payload.quoteNumber || generateQuoteNumber();
+  if (payload.id) {
+    db.prepare(
+      `UPDATE quotes
+       SET quote_name = @quote_name,
+           notes = @notes,
+           config_json = @config_json,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = @id`,
+    ).run({ id: payload.id, quote_name: payload.quoteName, notes: payload.notes, config_json: payload.configJson });
+    return { id: payload.id, quoteNumber };
+  }
+
+  const result = db.prepare(
+    `INSERT INTO quotes (quote_number, quote_name, notes, config_json)
+     VALUES (@quote_number, @quote_name, @notes, @config_json)`,
+  ).run({ quote_number: quoteNumber, quote_name: payload.quoteName, notes: payload.notes, config_json: payload.configJson });
+
+  return { id: Number(result.lastInsertRowid), quoteNumber };
+}

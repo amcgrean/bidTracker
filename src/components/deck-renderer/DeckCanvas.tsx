@@ -62,6 +62,18 @@ const RAIL_COLORS: Record<string, string> = {
   glass: "#88bbdd",
 };
 
+const FACADE_BASE_COLORS: Record<string, string> = {
+  vinyl: "#d5d0c8",
+  brick: "#b46a4d",
+  stone: "#a8a49d",
+  stucco: "#d8cfbf",
+  wood: "#9c7a5d",
+};
+
+function facadeColor(config: DeckConfig): string {
+  return config.houseColor || FACADE_BASE_COLORS[config.exteriorFacade] || "#d5d0c8";
+}
+
 // ─── Surface (top-down) view ─────────────────────────────────────────────────
 
 function drawDeckBoards(ctx: CanvasRenderingContext2D, x: number, y: number, wPx: number, dPx: number, config: DeckConfig, scale: number) {
@@ -155,8 +167,8 @@ function drawStairs2D(ctx: CanvasRenderingContext2D, x: number, y: number, wPx: 
 }
 
 function drawHouseWall(ctx: CanvasRenderingContext2D, x: number, y: number, wPx: number, config: DeckConfig) {
-  if (!config.ledgerAttached) return;
-  ctx.fillStyle = "#e0ddd5"; ctx.strokeStyle = "#999"; ctx.lineWidth = 2;
+  if (!config.ledgerAttached || !config.hasHouse) return;
+  ctx.fillStyle = facadeColor(config); ctx.strokeStyle = "#999"; ctx.lineWidth = 2;
   const wh = 20;
   ctx.fillRect(x - 10, y - wh, wPx + 20, wh);
   ctx.strokeRect(x - 10, y - wh, wPx + 20, wh);
@@ -278,9 +290,9 @@ function drawElevationView(ctx: CanvasRenderingContext2D, cw: number, ch: number
   ctx.fillText("GRADE", ox - 8, groundY + 4);
 
   // ── House wall (if ledger attached) ──
-  if (config.ledgerAttached) {
+  if (config.ledgerAttached && config.hasHouse) {
     const wallH = deckHPx + railHPx + 40;
-    ctx.fillStyle = "#e0ddd5";
+    ctx.fillStyle = facadeColor(config);
     ctx.strokeStyle = "#999";
     ctx.lineWidth = 2;
     ctx.fillRect(ox - 12, deckTopY - railHPx - 20, 12, wallH);
@@ -435,6 +447,17 @@ function drawIsoView(ctx: CanvasRenderingContext2D, cw: number, ch: number, conf
   const d = config.dimensions.depth;
   const h = config.dimensions.height;
   const railH = config.railing !== "none" ? 3 : 0;
+  const stairCount = Math.ceil((h * 12) / 7.5);
+  const stairRun = config.stairs.location === "none" ? 0 : Math.max(3, stairCount * 0.85);
+
+  let stairMinX = 0;
+  let stairMaxX = w;
+  let stairMinY = 0;
+  let stairMaxY = d;
+  if (config.stairs.location === "front") stairMaxY = d + stairRun;
+  if (config.stairs.location === "back") stairMinY = -stairRun;
+  if (config.stairs.location === "left") stairMinX = -stairRun;
+  if (config.stairs.location === "right") stairMaxX = w + stairRun;
 
   // Compute scale to fit
   const testPoints = [
@@ -444,6 +467,10 @@ function drawIsoView(ctx: CanvasRenderingContext2D, cw: number, ch: number, conf
     isoProject(w, d, 0, 1, rotationAngle),
     isoProject(0, 0, h + railH, 1, rotationAngle),
     isoProject(w, 0, h + railH, 1, rotationAngle),
+    isoProject(stairMinX, stairMinY, 0, 1, rotationAngle),
+    isoProject(stairMaxX, stairMaxY, 0, 1, rotationAngle),
+    isoProject(0, -0.5, h + railH + 2, 1, rotationAngle),
+    isoProject(w, -0.5, h + railH + 2, 1, rotationAngle),
   ];
   const minX = Math.min(...testPoints.map(p => p[0]));
   const maxX = Math.max(...testPoints.map(p => p[0]));
@@ -461,17 +488,33 @@ function drawIsoView(ctx: CanvasRenderingContext2D, cw: number, ch: number, conf
     isoProject(w, d, 0, scale, rotationAngle),
     isoProject(0, 0, h + railH, scale, rotationAngle),
     isoProject(w, 0, h + railH, scale, rotationAngle),
+    isoProject(stairMinX, stairMinY, 0, scale, rotationAngle),
+    isoProject(stairMaxX, stairMaxY, 0, scale, rotationAngle),
+    isoProject(0, -0.5, h + railH + 2, scale, rotationAngle),
+    isoProject(w, -0.5, h + railH + 2, scale, rotationAngle),
   ];
   const pMinX = Math.min(...projected.map(([x]) => x));
   const pMaxX = Math.max(...projected.map(([x]) => x));
-  const pMinY = Math.min(...projected.map(([, y]) => y));
   const pMaxY = Math.max(...projected.map(([, y]) => y));
   const offsetX = cw / 2 - (pMinX + pMaxX) / 2;
-  const offsetY = ch / 2 - (pMinY + pMaxY) / 2;
+  const offsetY = ch - PADDING - pMaxY;
 
   function p(x: number, y: number, z: number): [number, number] {
     const [ix, iy] = isoProject(x, y, z, scale, rotationAngle);
     return [ix + offsetX, iy + offsetY];
+  }
+
+  if (config.showGrass) {
+    const pad = Math.max(w, d) * 0.4;
+    const [g0x, g0y] = p(-pad, -pad, 0);
+    const [g1x, g1y] = p(w + pad, -pad, 0);
+    const [g2x, g2y] = p(w + pad, d + pad, 0);
+    const [g3x, g3y] = p(-pad, d + pad, 0);
+    ctx.fillStyle = "#7fa86c";
+    ctx.beginPath();
+    ctx.moveTo(g0x, g0y); ctx.lineTo(g1x, g1y); ctx.lineTo(g2x, g2y); ctx.lineTo(g3x, g3y);
+    ctx.closePath();
+    ctx.fill();
   }
 
   // ── Support posts ──
@@ -504,42 +547,97 @@ function drawIsoView(ctx: CanvasRenderingContext2D, cw: number, ch: number, conf
   ctx.closePath(); ctx.fill();
   ctx.strokeStyle = "#6b5c4b"; ctx.lineWidth = 2; ctx.stroke();
 
-  // Front face (depth side)
-  const [f0x, f0y] = p(0, d, 0);
-  const [f1x, f1y] = p(w, d, 0);
-  ctx.fillStyle = shadeColor(surfColor, -15);
-  ctx.beginPath();
-  ctx.moveTo(s2x, s2y); ctx.lineTo(s3x, s3y); ctx.lineTo(f0x, f0y); ctx.lineTo(f1x, f1y);
-  ctx.closePath(); ctx.fill(); ctx.stroke();
+  // Deck perimeter and edge lines (no solid skirting wall under deck)
+  const [b0x, b0y] = p(0, 0, 0);
+  const [b1x, b1y] = p(w, 0, 0);
+  const [b2x, b2y] = p(w, d, 0);
+  const [b3x, b3y] = p(0, d, 0);
 
-  // Right face
-  const [r0x, r0y] = p(w, 0, 0);
-  ctx.fillStyle = shadeColor(surfColor, -25);
-  ctx.beginPath();
-  ctx.moveTo(s1x, s1y); ctx.lineTo(s2x, s2y); ctx.lineTo(f1x, f1y); ctx.lineTo(r0x, r0y);
-  ctx.closePath(); ctx.fill(); ctx.stroke();
-
-  // ── Board lines on top face ──
-  const boardPx = (parseFloat(config.boardWidth) / 12);
-  ctx.strokeStyle = shadeColor(surfColor, -12);
-  ctx.lineWidth = 0.5;
-  let bPos = 0;
-  while (bPos < d) {
-    bPos += boardPx;
-    if (bPos >= d) break;
-    const [lx, ly] = p(0, bPos, h);
-    const [rx, ry] = p(w, bPos, h);
-    ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(rx, ry); ctx.stroke();
+  ctx.strokeStyle = shadeColor(surfColor, -28);
+  ctx.lineWidth = 1.4;
+  for (const [tx, ty, bx, by] of [[s0x, s0y, b0x, b0y], [s1x, s1y, b1x, b1y], [s2x, s2y, b2x, b2y], [s3x, s3y, b3x, b3y]]) {
+    ctx.beginPath();
+    ctx.moveTo(tx, ty);
+    ctx.lineTo(bx, by);
+    ctx.stroke();
   }
 
+  const rimZ = Math.max(0, h - 0.25);
+  const [rf0x, rf0y] = p(0, d, rimZ);
+  const [rf1x, rf1y] = p(w, d, rimZ);
+  const [rr0x, rr0y] = p(w, 0, rimZ);
+  ctx.strokeStyle = shadeColor(surfColor, -34);
+  ctx.lineWidth = 1.8;
+  ctx.beginPath(); ctx.moveTo(rf0x, rf0y); ctx.lineTo(rf1x, rf1y); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(rr0x, rr0y); ctx.lineTo(rf1x, rf1y); ctx.stroke();
+
+  // ── Board lines / composite texture on top face ──
+  const boardPx = (parseFloat(config.boardWidth) / 12);
+  const isComposite = config.material.startsWith("composite-");
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(s0x, s0y); ctx.lineTo(s1x, s1y); ctx.lineTo(s2x, s2y); ctx.lineTo(s3x, s3y);
+  ctx.closePath();
+  ctx.clip();
+
+  if (isComposite) {
+    let yFt = 0;
+    let idx = 0;
+    while (yFt < d) {
+      const nextY = Math.min(d, yFt + boardPx);
+      const [a1x, a1y] = p(0, yFt, h);
+      const [a2x, a2y] = p(w, yFt, h);
+      const [b2x, b2y] = p(w, nextY, h);
+      const [b1x, b1y] = p(0, nextY, h);
+      ctx.fillStyle = idx % 2 === 0 ? shadeColor(surfColor, -3) : shadeColor(surfColor, 4);
+      ctx.beginPath();
+      ctx.moveTo(a1x, a1y); ctx.lineTo(a2x, a2y); ctx.lineTo(b2x, b2y); ctx.lineTo(b1x, b1y);
+      ctx.closePath(); ctx.fill();
+      yFt = nextY;
+      idx += 1;
+    }
+
+    ctx.strokeStyle = shadeColor(surfColor, -18);
+    ctx.lineWidth = 0.7;
+    let seam = 0;
+    while (seam < d) {
+      seam += boardPx;
+      if (seam >= d) break;
+      const [lx, ly] = p(0, seam, h);
+      const [rx, ry] = p(w, seam, h);
+      ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(rx, ry); ctx.stroke();
+    }
+
+    ctx.strokeStyle = shadeColor(surfColor, 10);
+    ctx.lineWidth = 0.35;
+    for (let g = 0.2; g < d; g += 0.6) {
+      const [lx, ly] = p(0, g, h);
+      const [rx, ry] = p(w, g, h);
+      ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(rx, ry); ctx.stroke();
+    }
+  } else {
+    ctx.strokeStyle = shadeColor(surfColor, -12);
+    ctx.lineWidth = 0.5;
+    let bPos = 0;
+    while (bPos < d) {
+      bPos += boardPx;
+      if (bPos >= d) break;
+      const [lx, ly] = p(0, bPos, h);
+      const [rx, ry] = p(w, bPos, h);
+      ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(rx, ry); ctx.stroke();
+    }
+  }
+  ctx.restore();
+
   // ── House wall ──
-  if (config.ledgerAttached) {
+  if (config.ledgerAttached && config.hasHouse) {
     const wallH = h + railH + 2;
     const [w0x, w0y] = p(0, -0.5, 0);
     const [w1x, w1y] = p(w, -0.5, 0);
     const [w2x, w2y] = p(w, -0.5, wallH);
     const [w3x, w3y] = p(0, -0.5, wallH);
-    ctx.fillStyle = "#d5d0c8";
+    ctx.fillStyle = facadeColor(config);
     ctx.beginPath();
     ctx.moveTo(w0x, w0y); ctx.lineTo(w1x, w1y); ctx.lineTo(w2x, w2y); ctx.lineTo(w3x, w3y);
     ctx.closePath(); ctx.fill();
@@ -547,6 +645,21 @@ function drawIsoView(ctx: CanvasRenderingContext2D, cw: number, ch: number, conf
     ctx.fillStyle = "#888"; ctx.font = "11px sans-serif"; ctx.textAlign = "center";
     const [lx, ly] = p(w / 2, -0.5, wallH - 0.5);
     ctx.fillText("HOUSE", lx, ly);
+
+    if (config.patioDoor) {
+      const doorW = Math.max(2.5, Math.min(4, w * 0.25));
+      const doorH = Math.max(6, h + 0.5);
+      const dx0 = (w - doorW) / 2;
+      const [d0x, d0y] = p(dx0, -0.49, 0);
+      const [d1x, d1y] = p(dx0 + doorW, -0.49, 0);
+      const [d2x, d2y] = p(dx0 + doorW, -0.49, doorH);
+      const [d3x, d3y] = p(dx0, -0.49, doorH);
+      ctx.fillStyle = "#e7edf5";
+      ctx.beginPath();
+      ctx.moveTo(d0x, d0y); ctx.lineTo(d1x, d1y); ctx.lineTo(d2x, d2y); ctx.lineTo(d3x, d3y);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = "#8ca0b8"; ctx.lineWidth = 1; ctx.stroke();
+    }
   }
 
   // ── Railing ──
@@ -557,8 +670,6 @@ function drawIsoView(ctx: CanvasRenderingContext2D, cw: number, ch: number, conf
 
     // Posts
     const railPostSp = 4;
-    const sides: [number, number, number, number][] = [];
-    if (!config.ledgerAttached) sides.push([0, 0, w, 0]); // back
     // right side
     for (let ft = 0; ft <= d; ft += railPostSp) {
       const [bx, by] = p(w, Math.min(ft, d), h);
@@ -595,9 +706,8 @@ function drawIsoView(ctx: CanvasRenderingContext2D, cw: number, ch: number, conf
 
   // ── Stairs ──
   if (config.stairs.location !== "none") {
-    const stepCount = Math.ceil((h * 12) / 7.5);
+    const stepCount = stairCount;
     const stairWidth = Math.max(2, config.stairs.width);
-    const stairRun = Math.max(3, stepCount * 0.85);
 
     let anchorX = 0;
     let anchorY = 0;
@@ -643,7 +753,7 @@ function drawIsoView(ctx: CanvasRenderingContext2D, cw: number, ch: number, conf
 
     const stepRise = h / stepCount;
     const stepRun = stairRun / stepCount;
-    ctx.fillStyle = "#b8a080";
+    ctx.fillStyle = "#ccb693";
     ctx.strokeStyle = "#8b7355";
     ctx.lineWidth = 1;
 

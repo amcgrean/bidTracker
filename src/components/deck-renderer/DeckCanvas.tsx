@@ -15,6 +15,7 @@ interface Camera {
   x: number;
   y: number;
   zoom: number;
+  rotationAngle: number;
 }
 
 // ─── Shared helpers ──────────────────────────────────────────────────────────
@@ -420,14 +421,16 @@ function drawElevationView(ctx: CanvasRenderingContext2D, cw: number, ch: number
 
 // ─── Isometric (2.5D) view ───────────────────────────────────────────────────
 
-function isoProject(x: number, y: number, z: number, scale: number): [number, number] {
-  // Standard isometric: 30° angles
-  const ix = (x - y) * Math.cos(Math.PI / 6) * scale;
-  const iy = (x + y) * Math.sin(Math.PI / 6) * scale - z * scale;
+function isoProject(x: number, y: number, z: number, scale: number, rotationAngle: number): [number, number] {
+  const rotation = (rotationAngle * Math.PI) / 180;
+  const rx = x * Math.cos(rotation) - y * Math.sin(rotation);
+  const ry = x * Math.sin(rotation) + y * Math.cos(rotation);
+  const ix = (rx - ry) * Math.cos(Math.PI / 6) * scale;
+  const iy = (rx + ry) * Math.sin(Math.PI / 6) * scale - z * scale;
   return [ix, iy];
 }
 
-function drawIsoView(ctx: CanvasRenderingContext2D, cw: number, ch: number, config: DeckConfig) {
+function drawIsoView(ctx: CanvasRenderingContext2D, cw: number, ch: number, config: DeckConfig, rotationAngle: number) {
   const w = config.dimensions.width;
   const d = config.dimensions.depth;
   const h = config.dimensions.height;
@@ -435,12 +438,12 @@ function drawIsoView(ctx: CanvasRenderingContext2D, cw: number, ch: number, conf
 
   // Compute scale to fit
   const testPoints = [
-    isoProject(0, 0, 0, 1),
-    isoProject(w, 0, 0, 1),
-    isoProject(0, d, 0, 1),
-    isoProject(w, d, 0, 1),
-    isoProject(0, 0, h + railH, 1),
-    isoProject(w, 0, h + railH, 1),
+    isoProject(0, 0, 0, 1, rotationAngle),
+    isoProject(w, 0, 0, 1, rotationAngle),
+    isoProject(0, d, 0, 1, rotationAngle),
+    isoProject(w, d, 0, 1, rotationAngle),
+    isoProject(0, 0, h + railH, 1, rotationAngle),
+    isoProject(w, 0, h + railH, 1, rotationAngle),
   ];
   const minX = Math.min(...testPoints.map(p => p[0]));
   const maxX = Math.max(...testPoints.map(p => p[0]));
@@ -451,13 +454,23 @@ function drawIsoView(ctx: CanvasRenderingContext2D, cw: number, ch: number, conf
   const scale = Math.min((cw - PADDING * 2) / rangeX, (ch - PADDING * 2) / rangeY);
 
   // Center offset
-  const [cMinX, cMinY] = isoProject(0, d, h + railH, scale);
-  const [cMaxX] = isoProject(w, 0, 0, scale);
-  const offsetX = cw / 2 - (cMinX + cMaxX) / 2;
-  const offsetY = ch / 2 - (cMinY + isoProject(0, 0, 0, scale)[1]) / 2;
+  const projected = [
+    isoProject(0, 0, 0, scale, rotationAngle),
+    isoProject(w, 0, 0, scale, rotationAngle),
+    isoProject(0, d, 0, scale, rotationAngle),
+    isoProject(w, d, 0, scale, rotationAngle),
+    isoProject(0, 0, h + railH, scale, rotationAngle),
+    isoProject(w, 0, h + railH, scale, rotationAngle),
+  ];
+  const pMinX = Math.min(...projected.map(([x]) => x));
+  const pMaxX = Math.max(...projected.map(([x]) => x));
+  const pMinY = Math.min(...projected.map(([, y]) => y));
+  const pMaxY = Math.max(...projected.map(([, y]) => y));
+  const offsetX = cw / 2 - (pMinX + pMaxX) / 2;
+  const offsetY = ch / 2 - (pMinY + pMaxY) / 2;
 
   function p(x: number, y: number, z: number): [number, number] {
-    const [ix, iy] = isoProject(x, y, z, scale);
+    const [ix, iy] = isoProject(x, y, z, scale, rotationAngle);
     return [ix + offsetX, iy + offsetY];
   }
 
@@ -580,6 +593,81 @@ function drawIsoView(ctx: CanvasRenderingContext2D, cw: number, ch: number, conf
     }
   }
 
+  // ── Stairs ──
+  if (config.stairs.location !== "none") {
+    const stepCount = Math.ceil((h * 12) / 7.5);
+    const stairWidth = Math.max(2, config.stairs.width);
+    const stairRun = Math.max(3, stepCount * 0.85);
+
+    let anchorX = 0;
+    let anchorY = 0;
+    let dirX = 0;
+    let dirY = 0;
+    let crossX = 0;
+    let crossY = 0;
+
+    switch (config.stairs.location) {
+      case "front":
+        anchorX = w / 2 - stairWidth / 2;
+        anchorY = d;
+        dirX = 0;
+        dirY = 1;
+        crossX = 1;
+        crossY = 0;
+        break;
+      case "back":
+        anchorX = w / 2 + stairWidth / 2;
+        anchorY = 0;
+        dirX = 0;
+        dirY = -1;
+        crossX = -1;
+        crossY = 0;
+        break;
+      case "left":
+        anchorX = 0;
+        anchorY = d / 2 + stairWidth / 2;
+        dirX = -1;
+        dirY = 0;
+        crossX = 0;
+        crossY = -1;
+        break;
+      case "right":
+        anchorX = w;
+        anchorY = d / 2 - stairWidth / 2;
+        dirX = 1;
+        dirY = 0;
+        crossX = 0;
+        crossY = 1;
+        break;
+    }
+
+    const stepRise = h / stepCount;
+    const stepRun = stairRun / stepCount;
+    ctx.fillStyle = "#b8a080";
+    ctx.strokeStyle = "#8b7355";
+    ctx.lineWidth = 1;
+
+    for (let i = 0; i < stepCount; i++) {
+      const startX = anchorX + dirX * (stepRun * i);
+      const startY = anchorY + dirY * (stepRun * i);
+      const z = h - stepRise * (i + 1);
+
+      const p0 = p(startX, startY, z);
+      const p1 = p(startX + crossX * stairWidth, startY + crossY * stairWidth, z);
+      const p2 = p(startX + crossX * stairWidth + dirX * stepRun, startY + crossY * stairWidth + dirY * stepRun, z);
+      const p3 = p(startX + dirX * stepRun, startY + dirY * stepRun, z);
+
+      ctx.beginPath();
+      ctx.moveTo(p0[0], p0[1]);
+      ctx.lineTo(p1[0], p1[1]);
+      ctx.lineTo(p2[0], p2[1]);
+      ctx.lineTo(p3[0], p3[1]);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+
   // ── Dimension labels ──
   ctx.fillStyle = "#444"; ctx.font = "12px sans-serif"; ctx.textAlign = "center";
   const [dwx, dwy] = p(w / 2, d + 1.5, 0);
@@ -641,8 +729,9 @@ export default function DeckCanvas() {
   const { state } = useDeck();
   const { config } = state;
   const [view, setView] = useState<CanvasView>("isometric");
-  const [camera, setCamera] = useState<Camera>({ x: 0, y: 0, zoom: 1 });
+  const [camera, setCamera] = useState<Camera>({ x: 0, y: 0, zoom: 1, rotationAngle: 35 });
   const dragging = useRef(false);
+  const rotating = useRef(false);
   const lastMouse = useRef({ x: 0, y: 0 });
 
   const draw = useCallback(() => {
@@ -666,7 +755,7 @@ export default function DeckCanvas() {
       case "surface": drawSurfaceView(ctx, cw, ch, config); break;
       case "framing": drawFramingFull(ctx, cw, ch, config); break;
       case "elevation": drawElevationView(ctx, cw, ch, config); break;
-      case "isometric": drawIsoView(ctx, cw, ch, config); break;
+      case "isometric": drawIsoView(ctx, cw, ch, config, camera.rotationAngle); break;
     }
     ctx.restore();
   }, [config, view, camera]);
@@ -678,14 +767,10 @@ export default function DeckCanvas() {
     return () => window.removeEventListener("resize", handleResize);
   }, [draw]);
 
-  // Reset camera when view or config changes
-  useEffect(() => {
-    setCamera({ x: 0, y: 0, zoom: 1 });
-  }, [view, config]);
-
-  // ── Mouse handlers for pan/zoom ──
+  // ── Mouse handlers for pan/zoom/rotation ──
   function onMouseDown(e: React.MouseEvent) {
     dragging.current = true;
+    rotating.current = view === "isometric" && e.button === 0 && !e.shiftKey;
     lastMouse.current = { x: e.clientX, y: e.clientY };
   }
   function onMouseMove(e: React.MouseEvent) {
@@ -693,9 +778,15 @@ export default function DeckCanvas() {
     const dx = e.clientX - lastMouse.current.x;
     const dy = e.clientY - lastMouse.current.y;
     lastMouse.current = { x: e.clientX, y: e.clientY };
-    setCamera(c => ({ ...c, x: c.x + dx / c.zoom, y: c.y + dy / c.zoom }));
+
+    if (rotating.current) {
+      setCamera((c) => ({ ...c, rotationAngle: c.rotationAngle + dx * 0.5 }));
+      return;
+    }
+
+    setCamera((c) => ({ ...c, x: c.x + dx / c.zoom, y: c.y + dy / c.zoom }));
   }
-  function onMouseUp() { dragging.current = false; }
+  function onMouseUp() { dragging.current = false; rotating.current = false; }
   function onWheel(e: React.WheelEvent) {
     e.preventDefault();
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
@@ -706,6 +797,7 @@ export default function DeckCanvas() {
   function onTouchStart(e: React.TouchEvent) {
     if (e.touches.length === 1) {
       dragging.current = true;
+      rotating.current = view === "isometric";
       lastMouse.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
     }
   }
@@ -714,15 +806,21 @@ export default function DeckCanvas() {
     const dx = e.touches[0].clientX - lastMouse.current.x;
     const dy = e.touches[0].clientY - lastMouse.current.y;
     lastMouse.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    if (rotating.current) {
+      setCamera((c) => ({ ...c, rotationAngle: c.rotationAngle + dx * 0.5 }));
+      return;
+    }
+
     setCamera(c => ({ ...c, x: c.x + dx / c.zoom, y: c.y + dy / c.zoom }));
   }
-  function onTouchEnd() { dragging.current = false; }
+  function onTouchEnd() { dragging.current = false; rotating.current = false; }
 
   return (
     <div className="relative h-full w-full bg-gray-50 rounded-lg select-none">
       <canvas
         ref={canvasRef}
         className="h-full w-full cursor-grab active:cursor-grabbing"
+        onContextMenu={(e) => e.preventDefault()}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
@@ -738,7 +836,15 @@ export default function DeckCanvas() {
         {(Object.keys(VIEW_LABELS) as CanvasView[]).map((v) => (
           <button
             key={v}
-            onClick={() => setView(v)}
+            onClick={() => {
+              setView(v);
+              setCamera((c) => ({
+                x: 0,
+                y: 0,
+                zoom: 1,
+                rotationAngle: c.rotationAngle,
+              }));
+            }}
             className={`px-2.5 py-1.5 font-medium transition-colors ${
               view === v ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-100"
             }`}
@@ -759,13 +865,13 @@ export default function DeckCanvas() {
           className="h-7 w-7 rounded bg-white/90 border border-gray-200 text-gray-600 text-sm font-bold shadow-sm hover:bg-gray-100"
         >-</button>
         <button
-          onClick={() => setCamera({ x: 0, y: 0, zoom: 1 })}
+          onClick={() => setCamera((c) => ({ x: 0, y: 0, zoom: 1, rotationAngle: c.rotationAngle }))}
           className="h-7 rounded bg-white/90 border border-gray-200 text-gray-500 text-[10px] px-2 shadow-sm hover:bg-gray-100"
         >Reset</button>
       </div>
 
       <div className="absolute bottom-2 right-2 rounded bg-white/80 px-2 py-1 text-[10px] text-gray-400">
-        Drag to pan · Scroll to zoom
+        {view === "isometric" ? "Drag to rotate · Shift+drag to pan · Scroll to zoom" : "Drag to pan · Scroll to zoom"}
       </div>
     </div>
   );

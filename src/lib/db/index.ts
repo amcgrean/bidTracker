@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import fs from "fs";
 import path from "path";
 import {
   CREATE_TABLES_SQL,
@@ -15,7 +16,6 @@ export function getDb(): Database.Database {
   if (_db) return _db;
 
   // Ensure data directory exists
-  const fs = require("fs");
   const dir = path.dirname(DB_PATH);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 

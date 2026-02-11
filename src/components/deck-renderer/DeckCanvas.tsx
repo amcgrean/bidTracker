@@ -504,6 +504,38 @@ function drawIsoView(ctx: CanvasRenderingContext2D, cw: number, ch: number, conf
     return [ix + offsetX, iy + offsetY];
   }
 
+  function drawIsoHouseWall() {
+    if (!(config.ledgerAttached && config.hasHouse)) return;
+    const wallH = h + railH + 2;
+    const [w0x, w0y] = p(0, -0.5, 0);
+    const [w1x, w1y] = p(w, -0.5, 0);
+    const [w2x, w2y] = p(w, -0.5, wallH);
+    const [w3x, w3y] = p(0, -0.5, wallH);
+    ctx.fillStyle = facadeColor(config);
+    ctx.beginPath();
+    ctx.moveTo(w0x, w0y); ctx.lineTo(w1x, w1y); ctx.lineTo(w2x, w2y); ctx.lineTo(w3x, w3y);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = "#aaa"; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = "#888"; ctx.font = "11px sans-serif"; ctx.textAlign = "center";
+    const [lx, ly] = p(w / 2, -0.5, wallH - 0.5);
+    ctx.fillText("HOUSE", lx, ly);
+
+    if (config.patioDoor) {
+      const doorW = Math.max(2.5, Math.min(4, w * 0.25));
+      const doorH = Math.max(6, h + 0.5);
+      const dx0 = (w - doorW) / 2;
+      const [d0x, d0y] = p(dx0, -0.49, 0);
+      const [d1x, d1y] = p(dx0 + doorW, -0.49, 0);
+      const [d2x, d2y] = p(dx0 + doorW, -0.49, doorH);
+      const [d3x, d3y] = p(dx0, -0.49, doorH);
+      ctx.fillStyle = "#e7edf5";
+      ctx.beginPath();
+      ctx.moveTo(d0x, d0y); ctx.lineTo(d1x, d1y); ctx.lineTo(d2x, d2y); ctx.lineTo(d3x, d3y);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = "#8ca0b8"; ctx.lineWidth = 1; ctx.stroke();
+    }
+  }
+
   if (config.showGrass) {
     const pad = Math.max(w, d) * 0.4;
     const [g0x, g0y] = p(-pad, -pad, 0);
@@ -516,6 +548,9 @@ function drawIsoView(ctx: CanvasRenderingContext2D, cw: number, ch: number, conf
     ctx.closePath();
     ctx.fill();
   }
+
+  // Draw house before deck geometry so it stays visually behind the deck surface.
+  drawIsoHouseWall();
 
   // ── Support posts ──
   const postSp = 6;
@@ -629,38 +664,6 @@ function drawIsoView(ctx: CanvasRenderingContext2D, cw: number, ch: number, conf
     }
   }
   ctx.restore();
-
-  // ── House wall ──
-  if (config.ledgerAttached && config.hasHouse) {
-    const wallH = h + railH + 2;
-    const [w0x, w0y] = p(0, -0.5, 0);
-    const [w1x, w1y] = p(w, -0.5, 0);
-    const [w2x, w2y] = p(w, -0.5, wallH);
-    const [w3x, w3y] = p(0, -0.5, wallH);
-    ctx.fillStyle = facadeColor(config);
-    ctx.beginPath();
-    ctx.moveTo(w0x, w0y); ctx.lineTo(w1x, w1y); ctx.lineTo(w2x, w2y); ctx.lineTo(w3x, w3y);
-    ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = "#aaa"; ctx.lineWidth = 1; ctx.stroke();
-    ctx.fillStyle = "#888"; ctx.font = "11px sans-serif"; ctx.textAlign = "center";
-    const [lx, ly] = p(w / 2, -0.5, wallH - 0.5);
-    ctx.fillText("HOUSE", lx, ly);
-
-    if (config.patioDoor) {
-      const doorW = Math.max(2.5, Math.min(4, w * 0.25));
-      const doorH = Math.max(6, h + 0.5);
-      const dx0 = (w - doorW) / 2;
-      const [d0x, d0y] = p(dx0, -0.49, 0);
-      const [d1x, d1y] = p(dx0 + doorW, -0.49, 0);
-      const [d2x, d2y] = p(dx0 + doorW, -0.49, doorH);
-      const [d3x, d3y] = p(dx0, -0.49, doorH);
-      ctx.fillStyle = "#e7edf5";
-      ctx.beginPath();
-      ctx.moveTo(d0x, d0y); ctx.lineTo(d1x, d1y); ctx.lineTo(d2x, d2y); ctx.lineTo(d3x, d3y);
-      ctx.closePath(); ctx.fill();
-      ctx.strokeStyle = "#8ca0b8"; ctx.lineWidth = 1; ctx.stroke();
-    }
-  }
 
   // ── Railing ──
   if (config.railing !== "none") {

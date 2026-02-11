@@ -21,7 +21,7 @@ const CATEGORIES: {
   {
     value: "composite",
     label: "Composite Decking",
-    description: "Low-maintenance boards from Trex, TimberTech, or Deckorators.",
+    description: "Low-maintenance boards from Trex, TimberTech, Wolf, and more.",
   },
 ];
 
@@ -64,6 +64,18 @@ const COMPOSITE_MATERIALS: {
     label: "Deckorators",
     description:
       "Mineral-based composite. Surestone core resists moisture and mold.",
+  },
+  {
+    value: "composite-wolf",
+    label: "Wolf Home Products",
+    description:
+      "Serenity and Perspective lines. Natural wood look with lasting performance.",
+  },
+  {
+    value: "composite-moistureshield",
+    label: "MoistureShield",
+    description:
+      "Built for wet environments. Heat-tolerant, slip-resistant, pool-friendly.",
   },
 ];
 

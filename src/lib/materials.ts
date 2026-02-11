@@ -13,12 +13,15 @@ const DECKING_COST_PER_SQFT: Record<DeckingMaterial, number> = {
   "composite-trex": 8.0,
   "composite-timbertech": 9.0,
   "composite-deckorators": 7.5,
+  "composite-wolf": 7.0,
+  "composite-moistureshield": 8.5,
 };
 
 /** Approximate cost per linear foot for railing */
 const RAILING_COST_PER_LF: Record<RailingType, number> = {
   none: 0,
   wood: 15,
+  cedar: 18,
   metal: 45,
   glass: 75,
 };

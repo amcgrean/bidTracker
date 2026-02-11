@@ -1,10 +1,24 @@
 export type DeckShape = "rectangle" | "l-shape" | "t-shape" | "wrap-around";
 
-export type RailingType = "none" | "wood" | "metal" | "glass";
+export type RailingType = "none" | "wood" | "cedar" | "metal" | "glass";
 
-export type RailingBrand = "generic" | "westbury" | "deckorators" | "trex" | "timbertech";
+export type RailingBrand =
+  | "generic"
+  | "westbury"
+  | "deckorators"
+  | "trex"
+  | "timbertech"
+  | "wolf"
+  | "dekpro";
 
-export type DeckingMaterial = "pressure-treated" | "cedar" | "composite-trex" | "composite-timbertech" | "composite-deckorators";
+export type DeckingMaterial =
+  | "pressure-treated"
+  | "cedar"
+  | "composite-trex"
+  | "composite-timbertech"
+  | "composite-deckorators"
+  | "composite-wolf"
+  | "composite-moistureshield";
 
 export type DeckingCategory = "wood" | "composite";
 

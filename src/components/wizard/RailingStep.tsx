@@ -13,7 +13,12 @@ const RAILINGS: { value: RailingType; label: string; description: string }[] = [
   {
     value: "wood",
     label: "Wood Railing",
-    description: "Classic look. Matches pressure-treated or cedar decking.",
+    description: "Classic look. Matches pressure-treated decking.",
+  },
+  {
+    value: "cedar",
+    label: "Cedar Railing",
+    description: "Gripable cedar railing for a natural, rustic traditional look.",
   },
   {
     value: "metal",
@@ -58,10 +63,22 @@ const BRANDS: {
     forTypes: ["metal"],
   },
   {
+    value: "wolf",
+    label: "Wolf",
+    description: "Wolf Railing system. Pairs with Wolf composite decking.",
+    forTypes: ["metal"],
+  },
+  {
+    value: "dekpro",
+    label: "DekPro",
+    description: "Distinctive baluster designs. Unique style between the posts.",
+    forTypes: ["metal"],
+  },
+  {
     value: "generic",
     label: "Standard / Other",
     description: "Generic wood or unbranded railing.",
-    forTypes: ["wood"],
+    forTypes: ["wood", "cedar"],
   },
 ];
 
@@ -73,7 +90,7 @@ export default function RailingStep() {
 
   function setRailing(type: RailingType) {
     const defaultBrand =
-      type === "wood"
+      type === "wood" || type === "cedar"
         ? "generic"
         : type === "metal" || type === "glass"
           ? "westbury"

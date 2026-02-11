@@ -1,6 +1,7 @@
 "use client";
 
 import { useDeck } from "@/lib/deck-context";
+import { useAutoAdvance } from "@/lib/use-auto-advance";
 import { DeckShape } from "@/types/deck";
 import OptionCard from "@/components/ui/OptionCard";
 
@@ -28,7 +29,8 @@ const SHAPES: { value: DeckShape; label: string; description: string }[] = [
 ];
 
 export default function ShapeStep() {
-  const { state, dispatch } = useDeck();
+  const { state } = useDeck();
+  const selectAndAdvance = useAutoAdvance();
 
   return (
     <div>
@@ -43,12 +45,7 @@ export default function ShapeStep() {
             label={s.label}
             description={s.description}
             selected={state.config.shape === s.value}
-            onClick={() =>
-              dispatch({
-                type: "UPDATE_CONFIG",
-                payload: { shape: s.value },
-              })
-            }
+            onClick={() => selectAndAdvance({ shape: s.value })}
           />
         ))}
       </div>

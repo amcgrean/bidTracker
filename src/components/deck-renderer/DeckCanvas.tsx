@@ -15,6 +15,7 @@ interface Camera {
   x: number;
   y: number;
   zoom: number;
+  rotationAngle: number;
 }
 
 // ─── Shared helpers ──────────────────────────────────────────────────────────
@@ -420,27 +421,44 @@ function drawElevationView(ctx: CanvasRenderingContext2D, cw: number, ch: number
 
 // ─── Isometric (2.5D) view ───────────────────────────────────────────────────
 
-function isoProject(x: number, y: number, z: number, scale: number): [number, number] {
-  // Standard isometric: 30° angles
-  const ix = (x - y) * Math.cos(Math.PI / 6) * scale;
-  const iy = (x + y) * Math.sin(Math.PI / 6) * scale - z * scale;
+function isoProject(x: number, y: number, z: number, scale: number, rotationAngle: number): [number, number] {
+  const rotation = (rotationAngle * Math.PI) / 180;
+  const rx = x * Math.cos(rotation) - y * Math.sin(rotation);
+  const ry = x * Math.sin(rotation) + y * Math.cos(rotation);
+  const ix = (rx - ry) * Math.cos(Math.PI / 6) * scale;
+  const iy = (rx + ry) * Math.sin(Math.PI / 6) * scale - z * scale;
   return [ix, iy];
 }
 
-function drawIsoView(ctx: CanvasRenderingContext2D, cw: number, ch: number, config: DeckConfig) {
+function drawIsoView(ctx: CanvasRenderingContext2D, cw: number, ch: number, config: DeckConfig, rotationAngle: number) {
   const w = config.dimensions.width;
   const d = config.dimensions.depth;
   const h = config.dimensions.height;
   const railH = config.railing !== "none" ? 3 : 0;
+  const stairCount = Math.ceil((h * 12) / 7.5);
+  const stairRun = config.stairs.location === "none" ? 0 : Math.max(3, stairCount * 0.85);
+
+  let stairMinX = 0;
+  let stairMaxX = w;
+  let stairMinY = 0;
+  let stairMaxY = d;
+  if (config.stairs.location === "front") stairMaxY = d + stairRun;
+  if (config.stairs.location === "back") stairMinY = -stairRun;
+  if (config.stairs.location === "left") stairMinX = -stairRun;
+  if (config.stairs.location === "right") stairMaxX = w + stairRun;
 
   // Compute scale to fit
   const testPoints = [
-    isoProject(0, 0, 0, 1),
-    isoProject(w, 0, 0, 1),
-    isoProject(0, d, 0, 1),
-    isoProject(w, d, 0, 1),
-    isoProject(0, 0, h + railH, 1),
-    isoProject(w, 0, h + railH, 1),
+    isoProject(0, 0, 0, 1, rotationAngle),
+    isoProject(w, 0, 0, 1, rotationAngle),
+    isoProject(0, d, 0, 1, rotationAngle),
+    isoProject(w, d, 0, 1, rotationAngle),
+    isoProject(0, 0, h + railH, 1, rotationAngle),
+    isoProject(w, 0, h + railH, 1, rotationAngle),
+    isoProject(stairMinX, stairMinY, 0, 1, rotationAngle),
+    isoProject(stairMaxX, stairMaxY, 0, 1, rotationAngle),
+    isoProject(0, -0.5, h + railH + 2, 1, rotationAngle),
+    isoProject(w, -0.5, h + railH + 2, 1, rotationAngle),
   ];
   const minX = Math.min(...testPoints.map(p => p[0]));
   const maxX = Math.max(...testPoints.map(p => p[0]));
@@ -451,13 +469,26 @@ function drawIsoView(ctx: CanvasRenderingContext2D, cw: number, ch: number, conf
   const scale = Math.min((cw - PADDING * 2) / rangeX, (ch - PADDING * 2) / rangeY);
 
   // Center offset
-  const [cMinX, cMinY] = isoProject(0, d, h + railH, scale);
-  const [cMaxX] = isoProject(w, 0, 0, scale);
-  const offsetX = cw / 2 - (cMinX + cMaxX) / 2;
-  const offsetY = ch / 2 - (cMinY + isoProject(0, 0, 0, scale)[1]) / 2;
+  const projected = [
+    isoProject(0, 0, 0, scale, rotationAngle),
+    isoProject(w, 0, 0, scale, rotationAngle),
+    isoProject(0, d, 0, scale, rotationAngle),
+    isoProject(w, d, 0, scale, rotationAngle),
+    isoProject(0, 0, h + railH, scale, rotationAngle),
+    isoProject(w, 0, h + railH, scale, rotationAngle),
+    isoProject(stairMinX, stairMinY, 0, scale, rotationAngle),
+    isoProject(stairMaxX, stairMaxY, 0, scale, rotationAngle),
+    isoProject(0, -0.5, h + railH + 2, scale, rotationAngle),
+    isoProject(w, -0.5, h + railH + 2, scale, rotationAngle),
+  ];
+  const pMinX = Math.min(...projected.map(([x]) => x));
+  const pMaxX = Math.max(...projected.map(([x]) => x));
+  const pMaxY = Math.max(...projected.map(([, y]) => y));
+  const offsetX = cw / 2 - (pMinX + pMaxX) / 2;
+  const offsetY = ch - PADDING - pMaxY;
 
   function p(x: number, y: number, z: number): [number, number] {
-    const [ix, iy] = isoProject(x, y, z, scale);
+    const [ix, iy] = isoProject(x, y, z, scale, rotationAngle);
     return [ix + offsetX, iy + offsetY];
   }
 
@@ -467,8 +498,8 @@ function drawIsoView(ctx: CanvasRenderingContext2D, cw: number, ch: number, conf
   const postCountD = Math.ceil(d / postSp) + 1;
   ctx.strokeStyle = "#6b4226"; ctx.lineWidth = 2;
   for (let i = 0; i < postCountW; i++) {
-    if (config.ledgerAttached && i === 0) continue; // skip at house side (approximate)
     for (let j = 0; j < postCountD; j++) {
+      if (config.ledgerAttached && j === 0) continue; // skip posts on ledger/house side
       const px = Math.min(i * postSp, w);
       const py = Math.min(j * postSp, d);
       const [bx, by] = p(px, py, 0);
@@ -491,48 +522,103 @@ function drawIsoView(ctx: CanvasRenderingContext2D, cw: number, ch: number, conf
   ctx.closePath(); ctx.fill();
   ctx.strokeStyle = "#6b5c4b"; ctx.lineWidth = 2; ctx.stroke();
 
-  // Front face (depth side)
-  const [f0x, f0y] = p(0, d, 0);
-  const [f1x, f1y] = p(w, d, 0);
-  ctx.fillStyle = shadeColor(surfColor, -15);
-  ctx.beginPath();
-  ctx.moveTo(s2x, s2y); ctx.lineTo(s3x, s3y); ctx.lineTo(f0x, f0y); ctx.lineTo(f1x, f1y);
-  ctx.closePath(); ctx.fill(); ctx.stroke();
+  // Deck perimeter and edge lines (no solid skirting wall under deck)
+  const [b0x, b0y] = p(0, 0, 0);
+  const [b1x, b1y] = p(w, 0, 0);
+  const [b2x, b2y] = p(w, d, 0);
+  const [b3x, b3y] = p(0, d, 0);
 
-  // Right face
-  const [r0x, r0y] = p(w, 0, 0);
-  ctx.fillStyle = shadeColor(surfColor, -25);
-  ctx.beginPath();
-  ctx.moveTo(s1x, s1y); ctx.lineTo(s2x, s2y); ctx.lineTo(f1x, f1y); ctx.lineTo(r0x, r0y);
-  ctx.closePath(); ctx.fill(); ctx.stroke();
-
-  // ── Board lines on top face ──
-  const boardPx = (parseFloat(config.boardWidth) / 12);
-  ctx.strokeStyle = shadeColor(surfColor, -12);
-  ctx.lineWidth = 0.5;
-  let bPos = 0;
-  while (bPos < d) {
-    bPos += boardPx;
-    if (bPos >= d) break;
-    const [lx, ly] = p(0, bPos, h);
-    const [rx, ry] = p(w, bPos, h);
-    ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(rx, ry); ctx.stroke();
+  ctx.strokeStyle = shadeColor(surfColor, -28);
+  ctx.lineWidth = 1.4;
+  for (const [tx, ty, bx, by] of [[s0x, s0y, b0x, b0y], [s1x, s1y, b1x, b1y], [s2x, s2y, b2x, b2y], [s3x, s3y, b3x, b3y]]) {
+    ctx.beginPath();
+    ctx.moveTo(tx, ty);
+    ctx.lineTo(bx, by);
+    ctx.stroke();
   }
+
+  const rimZ = Math.max(0, h - 0.25);
+  const [rf0x, rf0y] = p(0, d, rimZ);
+  const [rf1x, rf1y] = p(w, d, rimZ);
+  const [rr0x, rr0y] = p(w, 0, rimZ);
+  ctx.strokeStyle = shadeColor(surfColor, -34);
+  ctx.lineWidth = 1.8;
+  ctx.beginPath(); ctx.moveTo(rf0x, rf0y); ctx.lineTo(rf1x, rf1y); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(rr0x, rr0y); ctx.lineTo(rf1x, rf1y); ctx.stroke();
+
+  // ── Board lines / composite texture on top face ──
+  const boardPx = (parseFloat(config.boardWidth) / 12);
+  const isComposite = config.material.startsWith("composite-");
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(s0x, s0y); ctx.lineTo(s1x, s1y); ctx.lineTo(s2x, s2y); ctx.lineTo(s3x, s3y);
+  ctx.closePath();
+  ctx.clip();
+
+  if (isComposite) {
+    let yFt = 0;
+    let idx = 0;
+    while (yFt < d) {
+      const nextY = Math.min(d, yFt + boardPx);
+      const [a1x, a1y] = p(0, yFt, h);
+      const [a2x, a2y] = p(w, yFt, h);
+      const [b2x, b2y] = p(w, nextY, h);
+      const [b1x, b1y] = p(0, nextY, h);
+      ctx.fillStyle = idx % 2 === 0 ? shadeColor(surfColor, -3) : shadeColor(surfColor, 4);
+      ctx.beginPath();
+      ctx.moveTo(a1x, a1y); ctx.lineTo(a2x, a2y); ctx.lineTo(b2x, b2y); ctx.lineTo(b1x, b1y);
+      ctx.closePath(); ctx.fill();
+      yFt = nextY;
+      idx += 1;
+    }
+
+    ctx.strokeStyle = shadeColor(surfColor, -18);
+    ctx.lineWidth = 0.7;
+    let seam = 0;
+    while (seam < d) {
+      seam += boardPx;
+      if (seam >= d) break;
+      const [lx, ly] = p(0, seam, h);
+      const [rx, ry] = p(w, seam, h);
+      ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(rx, ry); ctx.stroke();
+    }
+
+    ctx.strokeStyle = shadeColor(surfColor, 10);
+    ctx.lineWidth = 0.35;
+    for (let g = 0.2; g < d; g += 0.6) {
+      const [lx, ly] = p(0, g, h);
+      const [rx, ry] = p(w, g, h);
+      ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(rx, ry); ctx.stroke();
+    }
+  } else {
+    ctx.strokeStyle = shadeColor(surfColor, -12);
+    ctx.lineWidth = 0.5;
+    let bPos = 0;
+    while (bPos < d) {
+      bPos += boardPx;
+      if (bPos >= d) break;
+      const [lx, ly] = p(0, bPos, h);
+      const [rx, ry] = p(w, bPos, h);
+      ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(rx, ry); ctx.stroke();
+    }
+  }
+  ctx.restore();
 
   // ── House wall ──
   if (config.ledgerAttached) {
     const wallH = h + railH + 2;
-    const [w0x, w0y] = p(-0.5, 0, 0);
-    const [w1x, w1y] = p(-0.5, d, 0);
-    const [w2x, w2y] = p(-0.5, d, wallH);
-    const [w3x, w3y] = p(-0.5, 0, wallH);
+    const [w0x, w0y] = p(0, -0.5, 0);
+    const [w1x, w1y] = p(w, -0.5, 0);
+    const [w2x, w2y] = p(w, -0.5, wallH);
+    const [w3x, w3y] = p(0, -0.5, wallH);
     ctx.fillStyle = "#d5d0c8";
     ctx.beginPath();
     ctx.moveTo(w0x, w0y); ctx.lineTo(w1x, w1y); ctx.lineTo(w2x, w2y); ctx.lineTo(w3x, w3y);
     ctx.closePath(); ctx.fill();
     ctx.strokeStyle = "#aaa"; ctx.lineWidth = 1; ctx.stroke();
     ctx.fillStyle = "#888"; ctx.font = "11px sans-serif"; ctx.textAlign = "center";
-    const [lx, ly] = p(-0.5, d / 2, wallH - 0.5);
+    const [lx, ly] = p(w / 2, -0.5, wallH - 0.5);
     ctx.fillText("HOUSE", lx, ly);
   }
 
@@ -544,8 +630,6 @@ function drawIsoView(ctx: CanvasRenderingContext2D, cw: number, ch: number, conf
 
     // Posts
     const railPostSp = 4;
-    const sides: [number, number, number, number][] = [];
-    if (!config.ledgerAttached) sides.push([0, 0, w, 0]); // back
     // right side
     for (let ft = 0; ft <= d; ft += railPostSp) {
       const [bx, by] = p(w, Math.min(ft, d), h);
@@ -577,6 +661,80 @@ function drawIsoView(ctx: CanvasRenderingContext2D, cw: number, ch: number, conf
     for (const [x1, y1, z1, x2, y2, z2] of rails) {
       const [ax, ay] = p(x1, y1, z1); const [bx, by] = p(x2, y2, z2);
       ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+    }
+  }
+
+  // ── Stairs ──
+  if (config.stairs.location !== "none") {
+    const stepCount = stairCount;
+    const stairWidth = Math.max(2, config.stairs.width);
+
+    let anchorX = 0;
+    let anchorY = 0;
+    let dirX = 0;
+    let dirY = 0;
+    let crossX = 0;
+    let crossY = 0;
+
+    switch (config.stairs.location) {
+      case "front":
+        anchorX = w / 2 - stairWidth / 2;
+        anchorY = d;
+        dirX = 0;
+        dirY = 1;
+        crossX = 1;
+        crossY = 0;
+        break;
+      case "back":
+        anchorX = w / 2 + stairWidth / 2;
+        anchorY = 0;
+        dirX = 0;
+        dirY = -1;
+        crossX = -1;
+        crossY = 0;
+        break;
+      case "left":
+        anchorX = 0;
+        anchorY = d / 2 + stairWidth / 2;
+        dirX = -1;
+        dirY = 0;
+        crossX = 0;
+        crossY = -1;
+        break;
+      case "right":
+        anchorX = w;
+        anchorY = d / 2 - stairWidth / 2;
+        dirX = 1;
+        dirY = 0;
+        crossX = 0;
+        crossY = 1;
+        break;
+    }
+
+    const stepRise = h / stepCount;
+    const stepRun = stairRun / stepCount;
+    ctx.fillStyle = "#ccb693";
+    ctx.strokeStyle = "#8b7355";
+    ctx.lineWidth = 1;
+
+    for (let i = 0; i < stepCount; i++) {
+      const startX = anchorX + dirX * (stepRun * i);
+      const startY = anchorY + dirY * (stepRun * i);
+      const z = h - stepRise * (i + 1);
+
+      const p0 = p(startX, startY, z);
+      const p1 = p(startX + crossX * stairWidth, startY + crossY * stairWidth, z);
+      const p2 = p(startX + crossX * stairWidth + dirX * stepRun, startY + crossY * stairWidth + dirY * stepRun, z);
+      const p3 = p(startX + dirX * stepRun, startY + dirY * stepRun, z);
+
+      ctx.beginPath();
+      ctx.moveTo(p0[0], p0[1]);
+      ctx.lineTo(p1[0], p1[1]);
+      ctx.lineTo(p2[0], p2[1]);
+      ctx.lineTo(p3[0], p3[1]);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
     }
   }
 
@@ -641,8 +799,9 @@ export default function DeckCanvas() {
   const { state } = useDeck();
   const { config } = state;
   const [view, setView] = useState<CanvasView>("isometric");
-  const [camera, setCamera] = useState<Camera>({ x: 0, y: 0, zoom: 1 });
+  const [camera, setCamera] = useState<Camera>({ x: 0, y: 0, zoom: 1, rotationAngle: 35 });
   const dragging = useRef(false);
+  const rotating = useRef(false);
   const lastMouse = useRef({ x: 0, y: 0 });
 
   const draw = useCallback(() => {
@@ -666,7 +825,7 @@ export default function DeckCanvas() {
       case "surface": drawSurfaceView(ctx, cw, ch, config); break;
       case "framing": drawFramingFull(ctx, cw, ch, config); break;
       case "elevation": drawElevationView(ctx, cw, ch, config); break;
-      case "isometric": drawIsoView(ctx, cw, ch, config); break;
+      case "isometric": drawIsoView(ctx, cw, ch, config, camera.rotationAngle); break;
     }
     ctx.restore();
   }, [config, view, camera]);
@@ -678,59 +837,53 @@ export default function DeckCanvas() {
     return () => window.removeEventListener("resize", handleResize);
   }, [draw]);
 
-  // Reset camera when view or config changes
-  useEffect(() => {
-    setCamera({ x: 0, y: 0, zoom: 1 });
-  }, [view, config]);
-
-  // ── Mouse handlers for pan/zoom ──
-  function onMouseDown(e: React.MouseEvent) {
+  // ── Pointer handlers for pan/zoom/rotation ──
+  function onPointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
     dragging.current = true;
+    rotating.current = view === "isometric" && e.button === 0 && !e.shiftKey;
     lastMouse.current = { x: e.clientX, y: e.clientY };
+    e.currentTarget.setPointerCapture(e.pointerId);
   }
-  function onMouseMove(e: React.MouseEvent) {
+
+  function onPointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
     if (!dragging.current) return;
     const dx = e.clientX - lastMouse.current.x;
     const dy = e.clientY - lastMouse.current.y;
     lastMouse.current = { x: e.clientX, y: e.clientY };
-    setCamera(c => ({ ...c, x: c.x + dx / c.zoom, y: c.y + dy / c.zoom }));
-  }
-  function onMouseUp() { dragging.current = false; }
-  function onWheel(e: React.WheelEvent) {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setCamera(c => ({ ...c, zoom: Math.max(0.3, Math.min(5, c.zoom * delta)) }));
+
+    if (rotating.current) {
+      setCamera((c) => ({ ...c, rotationAngle: c.rotationAngle + dx * 0.65 }));
+      return;
+    }
+
+    setCamera((c) => ({ ...c, x: c.x + dx / c.zoom, y: c.y + dy / c.zoom }));
   }
 
-  // Touch handlers
-  function onTouchStart(e: React.TouchEvent) {
-    if (e.touches.length === 1) {
-      dragging.current = true;
-      lastMouse.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  function onPointerUp(e: React.PointerEvent<HTMLCanvasElement>) {
+    dragging.current = false;
+    rotating.current = false;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
     }
   }
-  function onTouchMove(e: React.TouchEvent) {
-    if (!dragging.current || e.touches.length !== 1) return;
-    const dx = e.touches[0].clientX - lastMouse.current.x;
-    const dy = e.touches[0].clientY - lastMouse.current.y;
-    lastMouse.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-    setCamera(c => ({ ...c, x: c.x + dx / c.zoom, y: c.y + dy / c.zoom }));
+
+  function onWheel(e: React.WheelEvent<HTMLCanvasElement>) {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    setCamera((c) => ({ ...c, zoom: Math.max(0.3, Math.min(5, c.zoom * delta)) }));
   }
-  function onTouchEnd() { dragging.current = false; }
 
   return (
     <div className="relative h-full w-full bg-gray-50 rounded-lg select-none">
       <canvas
         ref={canvasRef}
-        className="h-full w-full cursor-grab active:cursor-grabbing"
-        onMouseDown={onMouseDown}
-        onMouseMove={onMouseMove}
-        onMouseUp={onMouseUp}
-        onMouseLeave={onMouseUp}
+        className="h-full w-full cursor-grab active:cursor-grabbing touch-none"
+        onContextMenu={(e) => e.preventDefault()}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerLeave={onPointerUp}
         onWheel={onWheel}
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
       />
 
       {/* View toggle */}
@@ -738,7 +891,15 @@ export default function DeckCanvas() {
         {(Object.keys(VIEW_LABELS) as CanvasView[]).map((v) => (
           <button
             key={v}
-            onClick={() => setView(v)}
+            onClick={() => {
+              setView(v);
+              setCamera((c) => ({
+                x: 0,
+                y: 0,
+                zoom: 1,
+                rotationAngle: c.rotationAngle,
+              }));
+            }}
             className={`px-2.5 py-1.5 font-medium transition-colors ${
               view === v ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-100"
             }`}
@@ -759,13 +920,13 @@ export default function DeckCanvas() {
           className="h-7 w-7 rounded bg-white/90 border border-gray-200 text-gray-600 text-sm font-bold shadow-sm hover:bg-gray-100"
         >-</button>
         <button
-          onClick={() => setCamera({ x: 0, y: 0, zoom: 1 })}
+          onClick={() => setCamera((c) => ({ x: 0, y: 0, zoom: 1, rotationAngle: c.rotationAngle }))}
           className="h-7 rounded bg-white/90 border border-gray-200 text-gray-500 text-[10px] px-2 shadow-sm hover:bg-gray-100"
         >Reset</button>
       </div>
 
       <div className="absolute bottom-2 right-2 rounded bg-white/80 px-2 py-1 text-[10px] text-gray-400">
-        Drag to pan · Scroll to zoom
+        {view === "isometric" ? "Drag to rotate (3D) · Shift+drag to pan · Scroll to zoom" : "Drag to pan · Scroll to zoom"}
       </div>
     </div>
   );

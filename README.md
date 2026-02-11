@@ -6,9 +6,9 @@ An interactive web app that walks users through a series of questions about the 
 
 ## Current Status
 
-**Phase: Scaffolding / MVP**
+**Phase: Enhanced MVP (Phase 1 complete, Phase 2 in progress)**
 
-The core structure is in place: a step-by-step wizard on the left, a live 2D canvas preview on the right, and a material estimator that produces a line-item cost breakdown on the final review step.
+The configurator now includes a compact, mobile-friendly wizard, multi-view deck rendering (surface, framing, elevation, and isometric), URL persistence for shareable configurations, PDF export, and an admin-backed product/settings API.
 
 ## Product Catalog
 
@@ -35,7 +35,7 @@ The core structure is in place: a step-by-step wizard on the left, a live 2D can
 
 ## Objectives
 
-### Phase 1 — MVP (current)
+### Phase 1 — MVP (complete)
 - [x] Step-by-step wizard: shape, dimensions, material/brand, board pattern, railing/brand, stairs
 - [x] Wood vs. composite decking category with brand selection
 - [x] Railing type (wood, metal, glass) with brand selection — Westbury as default for metal/glass
@@ -43,18 +43,20 @@ The core structure is in place: a step-by-step wizard on the left, a live 2D can
 - [x] Material list estimator with itemized costs
 - [x] Support for rectangle, L-shape, T-shape, and wrap-around deck footprints
 - [x] Ledger-attached vs. freestanding option
-- [ ] Persist configuration to URL query params (shareable links)
-- [ ] Print / export material list to PDF
+- [x] Persist configuration to URL query params (shareable links)
+- [x] Print / export material list to PDF
 
 ### Phase 2 — Refinement
-- [ ] Accurate board-by-board rendering on the 2D canvas (individual boards with realistic spacing)
-- [ ] Diagonal, herringbone, and picture-frame pattern rendering on the canvas
+- [x] Accurate board-by-board rendering on the 2D canvas (individual boards with realistic spacing)
+- [x] Diagonal, herringbone, and picture-frame pattern rendering on the canvas
 - [ ] Interactive dimension editing: drag edges on the canvas to resize
-- [ ] Stair rendering improvements (3D-ish side profile view)
-- [ ] Mobile-responsive layout (stacked wizard + preview)
+- [x] Stair rendering improvements (3D-ish side profile view)
+- [x] Mobile-responsive layout (stacked wizard + preview)
 - [ ] Snap-to-grid and standard lumber length optimization (8', 10', 12', 16')
 - [ ] Color/finish selection per brand (e.g., Trex Transcend color options)
 - [ ] Brand-specific product line selection (e.g., Trex Transcend vs. Enhance vs. Select)
+- [x] Add alternate render modes (framing, elevation, isometric)
+- [x] Add engineered beam framing support
 
 ### Phase 3 — Advanced Features
 - [ ] User accounts and saved deck designs

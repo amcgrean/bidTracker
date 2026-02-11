@@ -480,8 +480,8 @@ function drawIsoView(ctx: CanvasRenderingContext2D, cw: number, ch: number, conf
   const postCountD = Math.ceil(d / postSp) + 1;
   ctx.strokeStyle = "#6b4226"; ctx.lineWidth = 2;
   for (let i = 0; i < postCountW; i++) {
-    if (config.ledgerAttached && i === 0) continue; // skip at house side (approximate)
     for (let j = 0; j < postCountD; j++) {
+      if (config.ledgerAttached && j === 0) continue; // skip posts on ledger/house side
       const px = Math.min(i * postSp, w);
       const py = Math.min(j * postSp, d);
       const [bx, by] = p(px, py, 0);
@@ -535,17 +535,17 @@ function drawIsoView(ctx: CanvasRenderingContext2D, cw: number, ch: number, conf
   // ── House wall ──
   if (config.ledgerAttached) {
     const wallH = h + railH + 2;
-    const [w0x, w0y] = p(-0.5, 0, 0);
-    const [w1x, w1y] = p(-0.5, d, 0);
-    const [w2x, w2y] = p(-0.5, d, wallH);
-    const [w3x, w3y] = p(-0.5, 0, wallH);
+    const [w0x, w0y] = p(0, -0.5, 0);
+    const [w1x, w1y] = p(w, -0.5, 0);
+    const [w2x, w2y] = p(w, -0.5, wallH);
+    const [w3x, w3y] = p(0, -0.5, wallH);
     ctx.fillStyle = "#d5d0c8";
     ctx.beginPath();
     ctx.moveTo(w0x, w0y); ctx.lineTo(w1x, w1y); ctx.lineTo(w2x, w2y); ctx.lineTo(w3x, w3y);
     ctx.closePath(); ctx.fill();
     ctx.strokeStyle = "#aaa"; ctx.lineWidth = 1; ctx.stroke();
     ctx.fillStyle = "#888"; ctx.font = "11px sans-serif"; ctx.textAlign = "center";
-    const [lx, ly] = p(-0.5, d / 2, wallH - 0.5);
+    const [lx, ly] = p(w / 2, -0.5, wallH - 0.5);
     ctx.fillText("HOUSE", lx, ly);
   }
 
@@ -767,68 +767,53 @@ export default function DeckCanvas() {
     return () => window.removeEventListener("resize", handleResize);
   }, [draw]);
 
-  // ── Mouse handlers for pan/zoom/rotation ──
-  function onMouseDown(e: React.MouseEvent) {
+  // ── Pointer handlers for pan/zoom/rotation ──
+  function onPointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
     dragging.current = true;
     rotating.current = view === "isometric" && e.button === 0 && !e.shiftKey;
     lastMouse.current = { x: e.clientX, y: e.clientY };
+    e.currentTarget.setPointerCapture(e.pointerId);
   }
-  function onMouseMove(e: React.MouseEvent) {
+
+  function onPointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
     if (!dragging.current) return;
     const dx = e.clientX - lastMouse.current.x;
     const dy = e.clientY - lastMouse.current.y;
     lastMouse.current = { x: e.clientX, y: e.clientY };
 
     if (rotating.current) {
-      setCamera((c) => ({ ...c, rotationAngle: c.rotationAngle + dx * 0.5 }));
+      setCamera((c) => ({ ...c, rotationAngle: c.rotationAngle + dx * 0.65 }));
       return;
     }
 
     setCamera((c) => ({ ...c, x: c.x + dx / c.zoom, y: c.y + dy / c.zoom }));
   }
-  function onMouseUp() { dragging.current = false; rotating.current = false; }
-  function onWheel(e: React.WheelEvent) {
+
+  function onPointerUp(e: React.PointerEvent<HTMLCanvasElement>) {
+    dragging.current = false;
+    rotating.current = false;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+  }
+
+  function onWheel(e: React.WheelEvent<HTMLCanvasElement>) {
     e.preventDefault();
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setCamera(c => ({ ...c, zoom: Math.max(0.3, Math.min(5, c.zoom * delta)) }));
+    setCamera((c) => ({ ...c, zoom: Math.max(0.3, Math.min(5, c.zoom * delta)) }));
   }
-
-  // Touch handlers
-  function onTouchStart(e: React.TouchEvent) {
-    if (e.touches.length === 1) {
-      dragging.current = true;
-      rotating.current = view === "isometric";
-      lastMouse.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-    }
-  }
-  function onTouchMove(e: React.TouchEvent) {
-    if (!dragging.current || e.touches.length !== 1) return;
-    const dx = e.touches[0].clientX - lastMouse.current.x;
-    const dy = e.touches[0].clientY - lastMouse.current.y;
-    lastMouse.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-    if (rotating.current) {
-      setCamera((c) => ({ ...c, rotationAngle: c.rotationAngle + dx * 0.5 }));
-      return;
-    }
-
-    setCamera(c => ({ ...c, x: c.x + dx / c.zoom, y: c.y + dy / c.zoom }));
-  }
-  function onTouchEnd() { dragging.current = false; rotating.current = false; }
 
   return (
     <div className="relative h-full w-full bg-gray-50 rounded-lg select-none">
       <canvas
         ref={canvasRef}
-        className="h-full w-full cursor-grab active:cursor-grabbing"
+        className="h-full w-full cursor-grab active:cursor-grabbing touch-none"
         onContextMenu={(e) => e.preventDefault()}
-        onMouseDown={onMouseDown}
-        onMouseMove={onMouseMove}
-        onMouseUp={onMouseUp}
-        onMouseLeave={onMouseUp}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerLeave={onPointerUp}
         onWheel={onWheel}
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
       />
 
       {/* View toggle */}
@@ -871,7 +856,7 @@ export default function DeckCanvas() {
       </div>
 
       <div className="absolute bottom-2 right-2 rounded bg-white/80 px-2 py-1 text-[10px] text-gray-400">
-        {view === "isometric" ? "Drag to rotate · Shift+drag to pan · Scroll to zoom" : "Drag to pan · Scroll to zoom"}
+        {view === "isometric" ? "Drag to rotate (3D) · Shift+drag to pan · Scroll to zoom" : "Drag to pan · Scroll to zoom"}
       </div>
     </div>
   );

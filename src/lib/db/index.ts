@@ -8,18 +8,36 @@ import {
   SEED_SETTINGS,
 } from "./schema";
 
-const DB_PATH = path.join(process.cwd(), "data", "deck-configurator.db");
+const DEFAULT_DB_FILENAME = "deck-configurator.db";
 
 let _db: Database.Database | null = null;
+
+function resolveDbPath(): string {
+  const explicitPath = process.env.DECK_DB_PATH || process.env.DATABASE_PATH;
+  if (explicitPath) {
+    const explicitDir = path.dirname(explicitPath);
+    if (!fs.existsSync(explicitDir)) fs.mkdirSync(explicitDir, { recursive: true });
+    return explicitPath;
+  }
+
+  const localPath = path.join(process.cwd(), "data", DEFAULT_DB_FILENAME);
+  try {
+    const localDir = path.dirname(localPath);
+    if (!fs.existsSync(localDir)) fs.mkdirSync(localDir, { recursive: true });
+    return localPath;
+  } catch {
+    const tempPath = path.join("/tmp", DEFAULT_DB_FILENAME);
+    const tempDir = path.dirname(tempPath);
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+    return tempPath;
+  }
+}
 
 export function getDb(): Database.Database {
   if (_db) return _db;
 
-  // Ensure data directory exists
-  const dir = path.dirname(DB_PATH);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-
-  _db = new Database(DB_PATH);
+  const dbPath = resolveDbPath();
+  _db = new Database(dbPath);
   _db.pragma("journal_mode = WAL");
   _db.pragma("foreign_keys = ON");
 

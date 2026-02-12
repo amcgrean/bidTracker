@@ -146,7 +146,7 @@ export function estimateMaterials(config: DeckConfig): MaterialList {
     // Flush beams need beam hangers
     items.push({
       name: "Beam hangers (flush mount)",
-      description: "Simpson?"  + " or equiv. concealed hanger",
+      description: "Simpson or equivalent concealed hanger",
       quantity: beamCount * 2,
       unit: "each",
       unitCost: 18,

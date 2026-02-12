@@ -240,8 +240,21 @@ export default function DeckCanvas() {
   const ref = useRef<HTMLCanvasElement | null>(null);
   const { state, dispatch } = useDeck();
   const [dragEdge, setDragEdge] = useState<DragEdge | null>(null);
+  const [resizeTick, setResizeTick] = useState(0);
 
   const series = useMemo(() => resolveRailSeries(state.config), [state.config]);
+
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+
+    const observer = new ResizeObserver(() => {
+      setResizeTick((tick) => tick + 1);
+    });
+
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const canvas = ref.current;
@@ -274,7 +287,7 @@ export default function DeckCanvas() {
     ctx.fillText(`Deck: ${state.config.activeDeckBrand} / ${state.config.activeDeckLine}`, 12, 20);
     ctx.fillText(`Railing Series: ${state.config.activeRailSeries} (${series.type})`, 12, 38);
     ctx.fillText("Drag W/D handles to resize (0.5' grid)", 12, 56);
-  }, [series.type, state.config]);
+  }, [resizeTick, series.type, state.config]);
 
   useEffect(() => {
     const canvas = ref.current;

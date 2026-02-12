@@ -32,7 +32,10 @@ interface Setting {
   description: string;
 }
 
-
+interface DeckingToRailingMigration {
+  deckingId: string;
+  railing: RailingProduct;
+}
 
 function normalizeHeader(header: string): string {
   return header.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -347,25 +350,25 @@ export default function AdminPage() {
   }
 
   async function autoSortImportedDecking() {
-    const migrations = decking
-      .map((product, idx) => {
-        const shouldMigrate = isLikelyRailingMigrationProduct(product.id, product.label, product.description);
-        if (!shouldMigrate) return null;
+    const migrations: DeckingToRailingMigration[] = decking.flatMap((product, idx) => {
+      const shouldMigrate = isLikelyRailingMigrationProduct(product.id, product.label, product.description);
+      if (!shouldMigrate) return [];
 
-        return {
-          deckingId: product.id,
-          railing: {
-            id: product.id,
-            type: parseRailingType(`${product.label} ${product.description}`),
-            label: product.label,
-            description: product.description,
-            cost_per_lf: 0,
-            active: product.active,
-            sort_order: idx,
-          } satisfies RailingProduct,
-        };
-      })
-      .filter((item): item is { deckingId: string; railing: RailingProduct } => item !== null);
+      const migration: DeckingToRailingMigration = {
+        deckingId: product.id,
+        railing: {
+          id: product.id,
+          type: parseRailingType(`${product.label} ${product.description}`),
+          label: product.label,
+          description: product.description,
+          cost_per_lf: 0,
+          active: product.active,
+          sort_order: idx,
+        },
+      };
+
+      return [migration];
+    });
 
     if (migrations.length === 0) {
       alert("No obvious railing items were found in decking products.");

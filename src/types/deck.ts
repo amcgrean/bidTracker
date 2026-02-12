@@ -70,6 +70,11 @@ export interface DeckConfig {
   houseColor: string;
   patioDoor: boolean;
   showGrass: boolean;
+  activeDeckBrand: string;
+  activeDeckLine: string;
+  activeDeckColor: string;
+  activeRailSeries: string;
+  activeRailColor: string;
 }
 
 export interface MaterialItem {
@@ -113,8 +118,8 @@ export const DEFAULT_DECK_CONFIG: DeckConfig = {
   material: "pressure-treated",
   boardWidth: "5.5",
   boardPattern: "standard",
-  railing: "wood",
-  railingBrand: "generic",
+  railing: "metal",
+  railingBrand: "westbury",
   beamType: "dropped",
   stairs: { location: "front", width: 4 },
   ledgerAttached: true,
@@ -125,4 +130,9 @@ export const DEFAULT_DECK_CONFIG: DeckConfig = {
   houseColor: "#d5d0c8",
   patioDoor: false,
   showGrass: false,
+  activeDeckBrand: "Trex",
+  activeDeckLine: "Transcend Lineage",
+  activeDeckColor: "#a59784",
+  activeRailSeries: "Tuscany C10",
+  activeRailColor: "#1a1a1a",
 };

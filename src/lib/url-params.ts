@@ -32,6 +32,11 @@ export function configToParams(config: DeckConfig): URLSearchParams {
   p.set("hc", config.houseColor);
   p.set("pd", config.patioDoor ? "1" : "0");
   p.set("gr", config.showGrass ? "1" : "0");
+  p.set("adc", config.activeDeckColor);
+  p.set("adb", config.activeDeckBrand);
+  p.set("adl", config.activeDeckLine);
+  p.set("ars", config.activeRailSeries);
+  p.set("arc", config.activeRailColor);
   return p;
 }
 
@@ -88,5 +93,10 @@ export function paramsToConfig(params: URLSearchParams): DeckConfig | null {
     houseColor: params.get("hc") ?? def.houseColor,
     patioDoor: params.get("pd") === "1",
     showGrass: params.get("gr") === "1",
+    activeDeckColor: params.get("adc") ?? def.activeDeckColor,
+    activeDeckBrand: params.get("adb") ?? def.activeDeckBrand,
+    activeDeckLine: params.get("adl") ?? def.activeDeckLine,
+    activeRailSeries: params.get("ars") ?? def.activeRailSeries,
+    activeRailColor: params.get("arc") ?? def.activeRailColor,
   };
 }

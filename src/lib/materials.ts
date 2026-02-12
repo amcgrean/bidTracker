@@ -31,6 +31,31 @@ const JOIST_SPACING = 16;
 
 /** Post spacing in feet */
 const POST_SPACING = 6;
+const STANDARD_LUMBER_LENGTHS = [16, 12, 10, 8];
+
+function optimizeLumberCuts(targetLength: number, pieceCount: number) {
+  const optimization: Record<number, number> = {};
+  let remaining = pieceCount;
+
+  for (const length of STANDARD_LUMBER_LENGTHS) {
+    if (length < targetLength || remaining <= 0) continue;
+    optimization[length] = remaining;
+    remaining = 0;
+  }
+
+  if (remaining > 0) {
+    optimization[16] = (optimization[16] ?? 0) + remaining;
+  }
+
+  const entries = Object.entries(optimization)
+    .map(([length, qty]) => ({ length: Number(length), qty }))
+    .sort((a, b) => b.length - a.length);
+
+  return {
+    entries,
+    selectedLength: entries[0]?.length ?? targetLength,
+  };
+}
 
 function getDeckArea(config: DeckConfig): number {
   const primary = config.dimensions.width * config.dimensions.depth;
@@ -91,29 +116,31 @@ export function estimateMaterials(config: DeckConfig): MaterialList {
   const joistCount =
     Math.ceil((config.dimensions.width * 12) / JOIST_SPACING) + 1;
   const joistLength = config.dimensions.depth;
+  const joistPlan = optimizeLumberCuts(joistLength, joistCount);
   items.push({
     name: "Joists (2x8)",
-    description: `${joistLength}' long, ${JOIST_SPACING}" on center`,
+    description: `${joistLength}' long, ${JOIST_SPACING}" on center (optimized from ${joistPlan.selectedLength}' stock)`,
     quantity: joistCount,
     unit: "each",
-    unitCost: joistLength * 1.5,
-    totalCost: joistCount * joistLength * 1.5,
+    unitCost: joistPlan.selectedLength * 1.5,
+    totalCost: joistCount * joistPlan.selectedLength * 1.5,
   });
 
   // --- Beams ---
   const isFlush = config.beamType === "flush";
   const beamCount = Math.ceil(config.dimensions.depth / POST_SPACING) + 1;
+  const beamPlan = optimizeLumberCuts(config.dimensions.width, beamCount);
 
   if (isFlush) {
     // Engineered / flush beam — LVL or PSL, sits flush with joists
     const flushBeamCostPerFt = 6.0; // LVL ~$6/ft
     items.push({
       name: "Engineered beam (LVL)",
-      description: `Flush mount, ${config.dimensions.width}' span`,
+      description: `Flush mount, ${config.dimensions.width}' span (${beamPlan.selectedLength}' stock)`,
       quantity: beamCount,
       unit: "each",
-      unitCost: config.dimensions.width * flushBeamCostPerFt,
-      totalCost: beamCount * config.dimensions.width * flushBeamCostPerFt,
+      unitCost: beamPlan.selectedLength * flushBeamCostPerFt,
+      totalCost: beamCount * beamPlan.selectedLength * flushBeamCostPerFt,
     });
 
     // Flush beams need beam hangers
@@ -129,11 +156,11 @@ export function estimateMaterials(config: DeckConfig): MaterialList {
     // Standard dropped beam — doubled 2x8 dimensional lumber
     items.push({
       name: "Beam boards (2x8)",
-      description: `Doubled, ${config.dimensions.width}' span`,
+      description: `Doubled, ${config.dimensions.width}' span (${beamPlan.selectedLength}' stock)`,
       quantity: beamCount * 2,
       unit: "each",
-      unitCost: config.dimensions.width * 1.5,
-      totalCost: beamCount * 2 * config.dimensions.width * 1.5,
+      unitCost: beamPlan.selectedLength * 1.5,
+      totalCost: beamCount * 2 * beamPlan.selectedLength * 1.5,
     });
   }
 
@@ -162,13 +189,14 @@ export function estimateMaterials(config: DeckConfig): MaterialList {
 
   // --- Ledger board ---
   if (config.ledgerAttached) {
+    const ledgerLength = optimizeLumberCuts(config.dimensions.width, 1).selectedLength;
     items.push({
       name: "Ledger board (2x8)",
-      description: `${config.dimensions.width}' long, lag bolted to house`,
+      description: `${config.dimensions.width}' long, lag bolted to house (${ledgerLength}' stock)`,
       quantity: 1,
       unit: "each",
-      unitCost: config.dimensions.width * 1.5,
-      totalCost: config.dimensions.width * 1.5,
+      unitCost: ledgerLength * 1.5,
+      totalCost: ledgerLength * 1.5,
     });
   }
 
@@ -237,6 +265,7 @@ export function estimateMaterials(config: DeckConfig): MaterialList {
 
   notes.push(
     "Estimates include ~10-15% waste factor for cuts.",
+    "Cut plans snap to standard lumber lengths (8', 10', 12', 16').",
     "Actual costs vary by region and supplier.",
     "Permit costs and labor are not included.",
     "Foundation requirements may vary by local code — consult a professional.",

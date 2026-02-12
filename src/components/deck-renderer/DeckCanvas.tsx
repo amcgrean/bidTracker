@@ -1,11 +1,22 @@
 "use client";
 
-import { useEffect, useRef, useMemo } from "react";
+import { useEffect, useRef, useMemo, useState } from "react";
 import { useDeck } from "@/lib/deck-context";
 import { DeckConfig } from "@/types/deck";
 import { BRAND_CATALOG } from "@/lib/brand-data";
 
 const PAD = 40;
+const DIMENSION_MIN = 6;
+const DIMENSION_MAX = 48;
+const SNAP_STEP = 0.5;
+const HANDLE_RADIUS = 8;
+
+type DragEdge = "right" | "bottom";
+
+function snapDimension(value: number) {
+  const snapped = Math.round(value / SNAP_STEP) * SNAP_STEP;
+  return Math.min(DIMENSION_MAX, Math.max(DIMENSION_MIN, snapped));
+}
 
 function getScale(config: DeckConfig, width: number, height: number) {
   const availableW = width - PAD * 2;
@@ -177,9 +188,58 @@ function drawRailing(ctx: CanvasRenderingContext2D, config: DeckConfig, x: numbe
   ctx.restore();
 }
 
+function drawDimensionHandles(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, d: number) {
+  const handles = [
+    { cx: x + w, cy: y + d / 2, edge: "right" as const },
+    { cx: x + w / 2, cy: y + d, edge: "bottom" as const },
+  ];
+
+  ctx.save();
+  handles.forEach((handle) => {
+    ctx.fillStyle = "#ffffff";
+    ctx.strokeStyle = "#2563eb";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(handle.cx, handle.cy, HANDLE_RADIUS, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#1d4ed8";
+    ctx.font = "10px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(handle.edge === "right" ? "W" : "D", handle.cx, handle.cy + 3);
+  });
+  ctx.restore();
+}
+
+function getPointerPosition(canvas: HTMLCanvasElement, event: PointerEvent) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: event.clientX - rect.left,
+    y: event.clientY - rect.top,
+  };
+}
+
+function resolveDragEdge(pointerX: number, pointerY: number, x: number, y: number, w: number, d: number): DragEdge | null {
+  const rightDx = pointerX - (x + w);
+  const rightDy = pointerY - (y + d / 2);
+  if (Math.hypot(rightDx, rightDy) <= HANDLE_RADIUS + 4) {
+    return "right";
+  }
+
+  const bottomDx = pointerX - (x + w / 2);
+  const bottomDy = pointerY - (y + d);
+  if (Math.hypot(bottomDx, bottomDy) <= HANDLE_RADIUS + 4) {
+    return "bottom";
+  }
+
+  return null;
+}
+
 export default function DeckCanvas() {
   const ref = useRef<HTMLCanvasElement | null>(null);
-  const { state } = useDeck();
+  const { state, dispatch } = useDeck();
+  const [dragEdge, setDragEdge] = useState<DragEdge | null>(null);
 
   const series = useMemo(() => resolveRailSeries(state.config), [state.config]);
 
@@ -207,12 +267,96 @@ export default function DeckCanvas() {
 
     drawDeck(ctx, state.config, x, y, w, d);
     drawRailing(ctx, state.config, x, y, w, d, scale);
+    drawDimensionHandles(ctx, x, y, w, d);
 
     ctx.fillStyle = "#334155";
     ctx.font = "12px sans-serif";
     ctx.fillText(`Deck: ${state.config.activeDeckBrand} / ${state.config.activeDeckLine}`, 12, 20);
     ctx.fillText(`Railing Series: ${state.config.activeRailSeries} (${series.type})`, 12, 38);
+    ctx.fillText("Drag W/D handles to resize (0.5' grid)", 12, 56);
   }, [series.type, state.config]);
+
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const canvasEl = canvas;
+
+    function handlePointerDown(event: PointerEvent) {
+      const rect = canvasEl.getBoundingClientRect();
+      const scale = getScale(state.config, rect.width, rect.height);
+      const w = state.config.dimensions.width * scale;
+      const d = state.config.dimensions.depth * scale;
+      const x = (rect.width - w) / 2;
+      const y = (rect.height - d) / 2;
+      const pointer = getPointerPosition(canvasEl, event);
+      const edge = resolveDragEdge(pointer.x, pointer.y, x, y, w, d);
+      if (!edge) return;
+
+      canvasEl.setPointerCapture(event.pointerId);
+      setDragEdge(edge);
+    }
+
+    function handlePointerMove(event: PointerEvent) {
+      if (!dragEdge) return;
+      const rect = canvasEl.getBoundingClientRect();
+      const pointer = getPointerPosition(canvasEl, event);
+      const scale = getScale(state.config, rect.width, rect.height);
+      const currentWidthPx = state.config.dimensions.width * scale;
+      const currentDepthPx = state.config.dimensions.depth * scale;
+      const x = (rect.width - currentWidthPx) / 2;
+      const y = (rect.height - currentDepthPx) / 2;
+
+      if (dragEdge === "right") {
+        const nextWidth = snapDimension((pointer.x - x) / scale);
+        if (nextWidth !== state.config.dimensions.width) {
+          dispatch({
+            type: "UPDATE_CONFIG",
+            payload: {
+              dimensions: {
+                ...state.config.dimensions,
+                width: nextWidth,
+              },
+            },
+          });
+        }
+      }
+
+      if (dragEdge === "bottom") {
+        const nextDepth = snapDimension((pointer.y - y) / scale);
+        if (nextDepth !== state.config.dimensions.depth) {
+          dispatch({
+            type: "UPDATE_CONFIG",
+            payload: {
+              dimensions: {
+                ...state.config.dimensions,
+                depth: nextDepth,
+              },
+            },
+          });
+        }
+      }
+    }
+
+    function handlePointerUp(event: PointerEvent) {
+      if (!dragEdge) return;
+      setDragEdge(null);
+      if (canvasEl.hasPointerCapture(event.pointerId)) {
+        canvasEl.releasePointerCapture(event.pointerId);
+      }
+    }
+
+    canvasEl.addEventListener("pointerdown", handlePointerDown);
+    canvasEl.addEventListener("pointermove", handlePointerMove);
+    canvasEl.addEventListener("pointerup", handlePointerUp);
+    canvasEl.addEventListener("pointercancel", handlePointerUp);
+
+    return () => {
+      canvasEl.removeEventListener("pointerdown", handlePointerDown);
+      canvasEl.removeEventListener("pointermove", handlePointerMove);
+      canvasEl.removeEventListener("pointerup", handlePointerUp);
+      canvasEl.removeEventListener("pointercancel", handlePointerUp);
+    };
+  }, [dispatch, dragEdge, state.config]);
 
   return (
     <div className="h-full w-full rounded-xl border border-gray-200 bg-white">

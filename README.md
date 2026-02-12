@@ -49,10 +49,10 @@ The configurator now includes a compact, mobile-friendly wizard, multi-view deck
 ### Phase 2 — Refinement
 - [x] Accurate board-by-board rendering on the 2D canvas (individual boards with realistic spacing)
 - [x] Diagonal, herringbone, and picture-frame pattern rendering on the canvas
-- [ ] Interactive dimension editing: drag edges on the canvas to resize
+- [x] Interactive dimension editing: drag edges on the canvas to resize
 - [x] Stair rendering improvements (3D-ish side profile view)
 - [x] Mobile-responsive layout (stacked wizard + preview)
-- [ ] Snap-to-grid and standard lumber length optimization (8', 10', 12', 16')
+- [x] Snap-to-grid and standard lumber length optimization (8', 10', 12', 16')
 - [ ] Color/finish selection per brand (e.g., Trex Transcend color options)
 - [ ] Brand-specific product line selection (e.g., Trex Transcend vs. Enhance vs. Select)
 - [x] Add alternate render modes (framing, elevation, isometric)

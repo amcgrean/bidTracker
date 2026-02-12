@@ -64,6 +64,8 @@ function parseDeckingCategory(raw: string): "wood" | "composite" {
 const RAILING_KEYWORDS = [
   "railing",
   "baluster",
+  "rail panel",
+  "rail pack",
   "rail kit",
   "stair rail",
   "post sleeve",
@@ -72,6 +74,19 @@ const RAILING_KEYWORDS = [
   "gate",
   "infill",
   "handrail",
+  "privacy screen",
+];
+
+const RAILING_STRONG_KEYWORDS = [
+  "railing",
+  "baluster",
+  "rail panel",
+  "rail pack",
+  "rail kit",
+  "stair rail",
+  "handrail",
+  "infill",
+  "gate",
   "privacy screen",
 ];
 
@@ -97,11 +112,50 @@ const ACCESSORY_KEYWORDS = [
   "splitter",
 ];
 
+const DECKING_KEYWORDS = [
+  "decking",
+  "deck board",
+  "fascia",
+  "riser",
+  "grooved",
+  "scalloped",
+  "square",
+  "porch",
+  "plank",
+  "pvc",
+  "composite",
+  "transcend",
+  "enhance",
+  "timbertech",
+  "trex",
+];
+
+function containsKeyword(text: string, keywords: string[]): boolean {
+  return keywords.some((keyword) => text.includes(keyword));
+}
+
 function classifyImportKind(...parts: string[]): "decking" | "railing" | "accessory" {
   const text = parts.filter(Boolean).join(" ").toLowerCase();
-  if (RAILING_KEYWORDS.some((keyword) => text.includes(keyword))) return "railing";
-  if (ACCESSORY_KEYWORDS.some((keyword) => text.includes(keyword))) return "accessory";
+
+  const hasDeckingSignal = containsKeyword(text, DECKING_KEYWORDS);
+  const hasRailingSignal = containsKeyword(text, RAILING_KEYWORDS);
+  const hasRailingStrongSignal = containsKeyword(text, RAILING_STRONG_KEYWORDS);
+  const hasAccessorySignal = containsKeyword(text, ACCESSORY_KEYWORDS);
+
+  if (hasRailingStrongSignal && !hasDeckingSignal) return "railing";
+  if (hasAccessorySignal && !hasRailingStrongSignal) return "accessory";
+  if (hasDeckingSignal) return "decking";
+  if (hasRailingSignal) return "railing";
+  if (hasAccessorySignal) return "accessory";
+
   return "decking";
+}
+
+function isLikelyRailingMigrationProduct(...parts: string[]): boolean {
+  const text = parts.filter(Boolean).join(" ").toLowerCase();
+  const hasStrongRailingSignal = containsKeyword(text, RAILING_STRONG_KEYWORDS);
+  const hasDeckingSignal = containsKeyword(text, DECKING_KEYWORDS);
+  return hasStrongRailingSignal && !hasDeckingSignal;
 }
 
 function parseRailingType(raw: string): "wood" | "cedar" | "metal" | "glass" {
@@ -295,8 +349,8 @@ export default function AdminPage() {
   async function autoSortImportedDecking() {
     const migrations = decking
       .map((product, idx) => {
-        const kind = classifyImportKind(product.id, product.label, product.description);
-        if (kind !== "railing") return null;
+        const shouldMigrate = isLikelyRailingMigrationProduct(product.id, product.label, product.description);
+        if (!shouldMigrate) return null;
 
         return {
           deckingId: product.id,

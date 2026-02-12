@@ -1,11 +1,23 @@
 "use client";
 
-import { useEffect, useRef, useMemo } from "react";
+import { useEffect, useRef, useMemo, useState } from "react";
 import { useDeck } from "@/lib/deck-context";
 import { DeckConfig } from "@/types/deck";
 import { BRAND_CATALOG } from "@/lib/brand-data";
 
 const PAD = 40;
+const DIMENSION_MIN = 6;
+const DIMENSION_MAX = 48;
+const SNAP_STEP = 0.5;
+const HANDLE_RADIUS = 8;
+
+type DragEdge = "right" | "bottom";
+export type RenderMode = "surface" | "framing" | "elevation" | "isometric";
+
+function snapDimension(value: number) {
+  const snapped = Math.round(value / SNAP_STEP) * SNAP_STEP;
+  return Math.min(DIMENSION_MAX, Math.max(DIMENSION_MIN, snapped));
+}
 
 function getScale(config: DeckConfig, width: number, height: number) {
   const availableW = width - PAD * 2;
@@ -43,7 +55,6 @@ function drawDeck(ctx: CanvasRenderingContext2D, config: DeckConfig, x: number, 
   ctx.fillStyle = "#9b7b53";
   ctx.fillRect(x, y, w, d);
 
-  // Base grain texture + multiply tint overlay to emulate colorized material.
   ctx.globalAlpha = 0.2;
   ctx.strokeStyle = "#4f3f2e";
   ctx.lineWidth = 1;
@@ -110,8 +121,6 @@ function drawRailing(ctx: CanvasRenderingContext2D, config: DeckConfig, x: numbe
 
   const picketStep = (3 / 12) * scale;
   const cableStep = (3 / 12) * scale;
-
-  // Batched positional generation to mimic instanced rendering.
   const instances: Array<{ x: number; y: number; w: number; h: number }> = [];
 
   if (series.type === "baluster" || series.type === "baluster_ornamental" || series.type === "thick_baluster") {
@@ -135,9 +144,8 @@ function drawRailing(ctx: CanvasRenderingContext2D, config: DeckConfig, x: numbe
       ctx.lineWidth = 2;
       const offset = (6 / 12) * scale;
       segments.forEach((segment) => {
-        const vertical = segment.x1 === segment.x2;
         ctx.beginPath();
-        if (vertical) {
+        if (segment.x1 === segment.x2) {
           const shift = segment.x1 === x ? offset : -offset;
           ctx.moveTo(segment.x1 + shift, segment.y1);
           ctx.lineTo(segment.x2 + shift, segment.y2);
@@ -155,12 +163,10 @@ function drawRailing(ctx: CanvasRenderingContext2D, config: DeckConfig, x: numbe
     ctx.strokeStyle = color;
     ctx.lineWidth = 1;
     segments.forEach((segment) => {
-      const vertical = segment.x1 === segment.x2;
-      const runs = 6;
-      for (let i = 1; i <= runs; i += 1) {
+      for (let i = 1; i <= 6; i += 1) {
         const offset = i * cableStep;
         ctx.beginPath();
-        if (vertical) {
+        if (segment.x1 === segment.x2) {
           const shift = segment.x1 === x ? offset : -offset;
           ctx.moveTo(segment.x1 + shift, segment.y1);
           ctx.lineTo(segment.x2 + shift, segment.y2);
@@ -177,11 +183,214 @@ function drawRailing(ctx: CanvasRenderingContext2D, config: DeckConfig, x: numbe
   ctx.restore();
 }
 
-export default function DeckCanvas() {
+function drawFraming(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, d: number, scale: number) {
+  const joistStep = (16 / 12) * scale;
+  const beamOffset = d * 0.2;
+
+  ctx.save();
+  ctx.fillStyle = "#e5e7eb";
+  ctx.fillRect(x, y, w, d);
+
+  ctx.strokeStyle = "#475569";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x, y, w, d);
+
+  ctx.strokeStyle = "#64748b";
+  ctx.lineWidth = 1.5;
+  for (let yy = y + joistStep; yy < y + d - joistStep / 2; yy += joistStep) {
+    ctx.beginPath();
+    ctx.moveTo(x + 4, yy);
+    ctx.lineTo(x + w - 4, yy);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = "#334155";
+  ctx.fillRect(x, y + beamOffset, w, 8);
+  ctx.fillRect(x, y + d - beamOffset - 8, w, 8);
+
+  for (let i = 0; i <= 4; i += 1) {
+    const px = x + (w * i) / 4;
+    ctx.beginPath();
+    ctx.arc(px, y + beamOffset + 10, 4, 0, Math.PI * 2);
+    ctx.arc(px, y + d - beamOffset - 10, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+function drawElevation(ctx: CanvasRenderingContext2D, config: DeckConfig, x: number, y: number, w: number, d: number) {
+  const deckTop = y + d * 0.45;
+  const deckFace = Math.max(20, d * 0.12);
+  const railHeight = Math.max(36, d * 0.2);
+  const postCount = Math.max(4, Math.floor(w / 90));
+
+  ctx.save();
+  ctx.fillStyle = "#8b6b44";
+  ctx.fillRect(x, deckTop, w, deckFace);
+  ctx.strokeStyle = "#3f3f46";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x, deckTop, w, deckFace);
+
+  ctx.strokeStyle = config.activeRailColor;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(x, deckTop - railHeight);
+  ctx.lineTo(x + w, deckTop - railHeight);
+  ctx.stroke();
+
+  for (let i = 0; i <= postCount; i += 1) {
+    const px = x + (w * i) / postCount;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(px, deckTop - railHeight);
+    ctx.lineTo(px, deckTop);
+    ctx.stroke();
+
+    ctx.lineWidth = 1;
+    for (let r = 1; r <= 3; r += 1) {
+      const ry = deckTop - (railHeight * r) / 4;
+      ctx.beginPath();
+      ctx.moveTo(px - 5, ry);
+      ctx.lineTo(px + 5, ry);
+      ctx.stroke();
+    }
+  }
+
+  ctx.fillStyle = "#374151";
+  const legHeight = Math.max(48, d * 0.28);
+  for (let i = 0; i <= 2; i += 1) {
+    const px = x + (w * i) / 2;
+    ctx.fillRect(px - 4, deckTop + deckFace, 8, legHeight);
+  }
+
+  ctx.restore();
+}
+
+function drawIsometric(ctx: CanvasRenderingContext2D, config: DeckConfig, x: number, y: number, w: number, d: number) {
+  const isoX = w * 0.32;
+  const isoY = d * 0.2;
+
+  const top = [
+    { x: x + isoX, y },
+    { x: x + isoX + w * 0.7, y },
+    { x: x + w, y: y + isoY },
+    { x: x + w * 0.3, y: y + isoY },
+  ];
+
+  ctx.save();
+  ctx.fillStyle = "#9b7b53";
+  ctx.beginPath();
+  ctx.moveTo(top[0].x, top[0].y);
+  top.slice(1).forEach((p) => ctx.lineTo(p.x, p.y));
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.globalCompositeOperation = "multiply";
+  ctx.fillStyle = getDeckTint(config.activeDeckColor);
+  ctx.beginPath();
+  ctx.moveTo(top[0].x, top[0].y);
+  top.slice(1).forEach((p) => ctx.lineTo(p.x, p.y));
+  ctx.closePath();
+  ctx.fill();
+  ctx.globalCompositeOperation = "source-over";
+
+  ctx.fillStyle = "#7c5c3a";
+  ctx.beginPath();
+  ctx.moveTo(top[2].x, top[2].y);
+  ctx.lineTo(top[1].x, top[1].y);
+  ctx.lineTo(top[1].x, top[1].y + d * 0.35);
+  ctx.lineTo(top[2].x, top[2].y + d * 0.35);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(top[3].x, top[3].y);
+  ctx.lineTo(top[2].x, top[2].y);
+  ctx.lineTo(top[2].x, top[2].y + d * 0.35);
+  ctx.lineTo(top[3].x, top[3].y + d * 0.35);
+  ctx.closePath();
+  ctx.fillStyle = "#6a4f33";
+  ctx.fill();
+
+  ctx.strokeStyle = config.activeRailColor;
+  ctx.lineWidth = 2;
+  for (let i = 0; i <= 6; i += 1) {
+    const t = i / 6;
+    const px = top[0].x + (top[1].x - top[0].x) * t;
+    const py = top[0].y + (top[1].y - top[0].y) * t;
+    ctx.beginPath();
+    ctx.moveTo(px, py - 22);
+    ctx.lineTo(px, py);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function drawDimensionHandles(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, d: number) {
+  const handles = [
+    { cx: x + w, cy: y + d / 2, edge: "right" as const },
+    { cx: x + w / 2, cy: y + d, edge: "bottom" as const },
+  ];
+
+  ctx.save();
+  handles.forEach((handle) => {
+    ctx.fillStyle = "#ffffff";
+    ctx.strokeStyle = "#2563eb";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(handle.cx, handle.cy, HANDLE_RADIUS, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#1d4ed8";
+    ctx.font = "10px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(handle.edge === "right" ? "W" : "D", handle.cx, handle.cy + 3);
+  });
+  ctx.restore();
+}
+
+function getPointerPosition(canvas: HTMLCanvasElement, event: PointerEvent) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: event.clientX - rect.left,
+    y: event.clientY - rect.top,
+  };
+}
+
+function resolveDragEdge(pointerX: number, pointerY: number, x: number, y: number, w: number, d: number): DragEdge | null {
+  const rightDx = pointerX - (x + w);
+  const rightDy = pointerY - (y + d / 2);
+  if (Math.hypot(rightDx, rightDy) <= HANDLE_RADIUS + 4) return "right";
+
+  const bottomDx = pointerX - (x + w / 2);
+  const bottomDy = pointerY - (y + d);
+  if (Math.hypot(bottomDx, bottomDy) <= HANDLE_RADIUS + 4) return "bottom";
+
+  return null;
+}
+
+export default function DeckCanvas({ renderMode = "surface" }: { renderMode?: RenderMode }) {
   const ref = useRef<HTMLCanvasElement | null>(null);
-  const { state } = useDeck();
+  const { state, dispatch } = useDeck();
+  const [dragEdge, setDragEdge] = useState<DragEdge | null>(null);
+  const [resizeTick, setResizeTick] = useState(0);
 
   const series = useMemo(() => resolveRailSeries(state.config), [state.config]);
+
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+
+    const observer = new ResizeObserver(() => {
+      setResizeTick((tick) => tick + 1);
+    });
+
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const canvas = ref.current;
@@ -205,14 +414,93 @@ export default function DeckCanvas() {
     const x = (rect.width - w) / 2;
     const y = (rect.height - d) / 2;
 
-    drawDeck(ctx, state.config, x, y, w, d);
-    drawRailing(ctx, state.config, x, y, w, d, scale);
+    if (renderMode === "framing") {
+      drawFraming(ctx, x, y, w, d, scale);
+    } else if (renderMode === "elevation") {
+      drawElevation(ctx, state.config, x, y, w, d);
+    } else if (renderMode === "isometric") {
+      drawIsometric(ctx, state.config, x, y, w, d);
+    } else {
+      drawDeck(ctx, state.config, x, y, w, d);
+      drawRailing(ctx, state.config, x, y, w, d, scale);
+      drawDimensionHandles(ctx, x, y, w, d);
+    }
 
     ctx.fillStyle = "#334155";
     ctx.font = "12px sans-serif";
-    ctx.fillText(`Deck: ${state.config.activeDeckBrand} / ${state.config.activeDeckLine}`, 12, 20);
-    ctx.fillText(`Railing Series: ${state.config.activeRailSeries} (${series.type})`, 12, 38);
-  }, [series.type, state.config]);
+    ctx.fillText(`Mode: ${renderMode}`, 12, 20);
+    ctx.fillText(`Deck: ${state.config.activeDeckBrand} / ${state.config.activeDeckLine}`, 12, 38);
+    ctx.fillText(`Railing Series: ${state.config.activeRailSeries} (${series.type})`, 12, 56);
+    if (renderMode === "surface") {
+      ctx.fillText("Drag W/D handles to resize (0.5' grid)", 12, 74);
+    }
+  }, [renderMode, resizeTick, series.type, state.config]);
+
+  useEffect(() => {
+    if (renderMode !== "surface") return;
+    const canvas = ref.current;
+    if (!canvas) return;
+    const canvasEl = canvas;
+
+    function handlePointerDown(event: PointerEvent) {
+      const rect = canvasEl.getBoundingClientRect();
+      const scale = getScale(state.config, rect.width, rect.height);
+      const w = state.config.dimensions.width * scale;
+      const d = state.config.dimensions.depth * scale;
+      const x = (rect.width - w) / 2;
+      const y = (rect.height - d) / 2;
+      const pointer = getPointerPosition(canvasEl, event);
+      const edge = resolveDragEdge(pointer.x, pointer.y, x, y, w, d);
+      if (!edge) return;
+      canvasEl.setPointerCapture(event.pointerId);
+      setDragEdge(edge);
+    }
+
+    function handlePointerMove(event: PointerEvent) {
+      if (!dragEdge) return;
+      const rect = canvasEl.getBoundingClientRect();
+      const pointer = getPointerPosition(canvasEl, event);
+      const scale = getScale(state.config, rect.width, rect.height);
+      const currentWidthPx = state.config.dimensions.width * scale;
+      const currentDepthPx = state.config.dimensions.depth * scale;
+      const x = (rect.width - currentWidthPx) / 2;
+      const y = (rect.height - currentDepthPx) / 2;
+
+      if (dragEdge === "right") {
+        const nextWidth = snapDimension((pointer.x - x) / scale);
+        if (nextWidth !== state.config.dimensions.width) {
+          dispatch({ type: "UPDATE_CONFIG", payload: { dimensions: { ...state.config.dimensions, width: nextWidth } } });
+        }
+      }
+
+      if (dragEdge === "bottom") {
+        const nextDepth = snapDimension((pointer.y - y) / scale);
+        if (nextDepth !== state.config.dimensions.depth) {
+          dispatch({ type: "UPDATE_CONFIG", payload: { dimensions: { ...state.config.dimensions, depth: nextDepth } } });
+        }
+      }
+    }
+
+    function handlePointerUp(event: PointerEvent) {
+      if (!dragEdge) return;
+      setDragEdge(null);
+      if (canvasEl.hasPointerCapture(event.pointerId)) {
+        canvasEl.releasePointerCapture(event.pointerId);
+      }
+    }
+
+    canvasEl.addEventListener("pointerdown", handlePointerDown);
+    canvasEl.addEventListener("pointermove", handlePointerMove);
+    canvasEl.addEventListener("pointerup", handlePointerUp);
+    canvasEl.addEventListener("pointercancel", handlePointerUp);
+
+    return () => {
+      canvasEl.removeEventListener("pointerdown", handlePointerDown);
+      canvasEl.removeEventListener("pointermove", handlePointerMove);
+      canvasEl.removeEventListener("pointerup", handlePointerUp);
+      canvasEl.removeEventListener("pointercancel", handlePointerUp);
+    };
+  }, [dispatch, dragEdge, renderMode, state.config]);
 
   return (
     <div className="h-full w-full rounded-xl border border-gray-200 bg-white">

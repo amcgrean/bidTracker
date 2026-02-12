@@ -15,9 +15,11 @@ interface DeckingProduct {
   sort_order: number;
 }
 
+type RailingType = "wood" | "cedar" | "metal" | "glass";
+
 interface RailingProduct {
   id: string;
-  type: string;
+  type: RailingType;
   label: string;
   description: string;
   cost_per_lf: number;
@@ -161,7 +163,7 @@ function isLikelyRailingMigrationProduct(...parts: string[]): boolean {
   return hasStrongRailingSignal && !hasDeckingSignal;
 }
 
-function parseRailingType(raw: string): "wood" | "cedar" | "metal" | "glass" {
+function parseRailingType(raw: string): RailingType {
   const normalized = raw.toLowerCase();
   if (normalized.includes("glass")) return "glass";
   if (normalized.includes("cedar")) return "cedar";
@@ -827,7 +829,7 @@ function RailingTable({
       .filter((r) => r.length > 0)
       .map((r, idx) => ({
         id: r[col.id] ?? `railing-${idx + 1}`,
-        type: (r[col.type] ?? "metal") || "metal",
+        type: parseRailingType((r[col.type] ?? "metal") || "metal"),
         label: r[col.label] ?? "",
         description: r[col.description] ?? "",
         cost_per_lf: Number(r[col.cost_per_lf] ?? r[col.cost] ?? 0),
@@ -985,7 +987,7 @@ function RailingEditor({
             </label>
             <select
               value={form.type}
-              onChange={(e) => setForm({ ...form, type: e.target.value })}
+              onChange={(e) => setForm({ ...form, type: parseRailingType(e.target.value) })}
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
             >
               <option value="wood">Wood</option>

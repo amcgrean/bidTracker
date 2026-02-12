@@ -15,9 +15,11 @@ interface DeckingProduct {
   sort_order: number;
 }
 
+type RailingType = "wood" | "cedar" | "metal" | "glass";
+
 interface RailingProduct {
   id: string;
-  type: string;
+  type: RailingType;
   label: string;
   description: string;
   cost_per_lf: number;
@@ -32,7 +34,10 @@ interface Setting {
   description: string;
 }
 
-
+interface DeckingToRailingMigration {
+  deckingId: string;
+  railing: RailingProduct;
+}
 
 function normalizeHeader(header: string): string {
   return header.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -59,6 +64,111 @@ function cleanImportCell(value: string): string {
 function parseDeckingCategory(raw: string): "wood" | "composite" {
   const normalized = raw.toLowerCase();
   return normalized.includes("composite") ? "composite" : "wood";
+}
+
+const RAILING_KEYWORDS = [
+  "railing",
+  "baluster",
+  "rail panel",
+  "rail pack",
+  "rail kit",
+  "stair rail",
+  "post sleeve",
+  "post cap",
+  "post skirt",
+  "gate",
+  "infill",
+  "handrail",
+  "privacy screen",
+];
+
+const RAILING_STRONG_KEYWORDS = [
+  "railing",
+  "baluster",
+  "rail panel",
+  "rail pack",
+  "rail kit",
+  "stair rail",
+  "handrail",
+  "infill",
+  "gate",
+  "privacy screen",
+];
+
+const ACCESSORY_KEYWORDS = [
+  "screw",
+  "screws",
+  "fastener",
+  "fasteners",
+  "clip",
+  "clips",
+  "bracket",
+  "brackets",
+  "connector",
+  "bit",
+  "driver",
+  "adhesive",
+  "transformer",
+  "light",
+  "wire",
+  "harness",
+  "hanger",
+  "hardware",
+  "splitter",
+];
+
+const DECKING_KEYWORDS = [
+  "decking",
+  "deck board",
+  "fascia",
+  "riser",
+  "grooved",
+  "scalloped",
+  "square",
+  "porch",
+  "plank",
+  "pvc",
+  "composite",
+  "transcend",
+  "enhance",
+  "timbertech",
+  "trex",
+];
+
+function containsKeyword(text: string, keywords: string[]): boolean {
+  return keywords.some((keyword) => text.includes(keyword));
+}
+
+function classifyImportKind(...parts: string[]): "decking" | "railing" | "accessory" {
+  const text = parts.filter(Boolean).join(" ").toLowerCase();
+
+  const hasDeckingSignal = containsKeyword(text, DECKING_KEYWORDS);
+  const hasRailingSignal = containsKeyword(text, RAILING_KEYWORDS);
+  const hasRailingStrongSignal = containsKeyword(text, RAILING_STRONG_KEYWORDS);
+  const hasAccessorySignal = containsKeyword(text, ACCESSORY_KEYWORDS);
+
+  if (hasRailingStrongSignal && !hasDeckingSignal) return "railing";
+  if (hasAccessorySignal && !hasRailingStrongSignal) return "accessory";
+  if (hasDeckingSignal) return "decking";
+  if (hasRailingSignal) return "railing";
+  if (hasAccessorySignal) return "accessory";
+
+  return "decking";
+}
+
+function isLikelyRailingMigrationProduct(...parts: string[]): boolean {
+  const text = parts.filter(Boolean).join(" ").toLowerCase();
+  const hasStrongRailingSignal = containsKeyword(text, RAILING_STRONG_KEYWORDS);
+  const hasDeckingSignal = containsKeyword(text, DECKING_KEYWORDS);
+  return hasStrongRailingSignal && !hasDeckingSignal;
+}
+
+function parseRailingType(raw: string): RailingType {
+  const normalized = raw.toLowerCase();
+  if (normalized.includes("glass")) return "glass";
+  if (normalized.includes("cedar")) return "cedar";
+  if (normalized.includes("wood")) return "wood";
+  return "metal";
 }
 
 function parseCsvRows(text: string): string[][] {
@@ -184,11 +294,15 @@ export default function AdminPage() {
     void loadProducts();
   }
 
-  async function deleteDeckingProduct(id: string) {
-    if (!confirm(`Delete decking product "${id}"?`)) return;
+  async function deleteDeckingProductById(id: string, skipConfirm = false) {
+    if (!skipConfirm && !confirm(`Delete decking product "${id}"?`)) return;
     await fetch(`/api/admin/products?table=decking&id=${encodeURIComponent(id)}`, {
       method: "DELETE",
     });
+  }
+
+  async function deleteDeckingProduct(id: string) {
+    await deleteDeckingProductById(id);
     void loadProducts();
   }
 
@@ -232,6 +346,47 @@ export default function AdminPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ table: "railing", ...product }),
       });
+    }
+    setSaving(false);
+    void loadProducts();
+  }
+
+  async function autoSortImportedDecking() {
+    const migrations: DeckingToRailingMigration[] = decking.flatMap((product, idx) => {
+      const shouldMigrate = isLikelyRailingMigrationProduct(product.id, product.label, product.description);
+      if (!shouldMigrate) return [];
+
+      const migration: DeckingToRailingMigration = {
+        deckingId: product.id,
+        railing: {
+          id: product.id,
+          type: parseRailingType(`${product.label} ${product.description}`),
+          label: product.label,
+          description: product.description,
+          cost_per_lf: 0,
+          active: product.active,
+          sort_order: idx,
+        },
+      };
+
+      return [migration];
+    });
+
+    if (migrations.length === 0) {
+      alert("No obvious railing items were found in decking products.");
+      return;
+    }
+
+    if (!confirm(`Move ${migrations.length} likely railing items from Decking to Railing?`)) return;
+
+    setSaving(true);
+    for (const item of migrations) {
+      await fetch("/api/admin/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ table: "railing", ...item.railing }),
+      });
+      await deleteDeckingProductById(item.deckingId, true);
     }
     setSaving(false);
     void loadProducts();
@@ -290,6 +445,8 @@ export default function AdminPage() {
             onSave={saveDeckingProduct}
             onDelete={deleteDeckingProduct}
             onImport={importDeckingProducts}
+            onImportRailing={importRailingProducts}
+            onAutoSort={autoSortImportedDecking}
           />
         )}
 
@@ -317,11 +474,15 @@ function DeckingTable({
   onSave,
   onDelete,
   onImport,
+  onImportRailing,
+  onAutoSort,
 }: {
   products: DeckingProduct[];
   onSave: (p: DeckingProduct) => void;
   onDelete: (id: string) => void;
   onImport: (products: DeckingProduct[]) => Promise<void>;
+  onImportRailing: (products: RailingProduct[]) => Promise<void>;
+  onAutoSort: () => Promise<void>;
 }) {
   const [editing, setEditing] = useState<DeckingProduct | null>(null);
 
@@ -354,20 +515,56 @@ function DeckingTable({
           : (labelBase || ext || item);
 
         const detailParts = [major, minor, size].filter(Boolean);
+        const fullDescription = detailParts.length > 0
+          ? `${detailParts.join(" • ")}${description ? ` — ${description}` : ""}`
+          : description;
+        const kind = classifyImportKind(major, minor, label, fullDescription, ext, item);
 
         return {
+          kind,
           id,
           category,
           label,
-          description: detailParts.length > 0 ? `${detailParts.join(" • ")}${description ? ` — ${description}` : ""}` : description,
+          description: kind === "accessory" ? `Accessory/Misc • ${fullDescription}` : fullDescription,
           cost_per_sqft: Number(getValue(r, col, "cost_per_sqft", "cost", "costpersqft") || 0),
           active: Number(getValue(r, col, "active") || 1) ? 1 : 0,
           sort_order: Number(getValue(r, col, "sort_order", "sortorder") || idx),
+          railingType: parseRailingType(`${major} ${minor} ${label} ${fullDescription}`),
         };
       })
       .filter((r) => r.id && r.label);
 
-    await onImport(parsed);
+    const deckingProducts = parsed
+      .filter((row) => row.kind !== "railing")
+      .map((row) => ({
+        id: row.id,
+        category: row.category,
+        label: row.label,
+        description: row.description,
+        cost_per_sqft: row.cost_per_sqft,
+        active: row.active,
+        sort_order: row.sort_order,
+      }));
+
+    const railingProducts = parsed
+      .filter((row) => row.kind === "railing")
+      .map((row) => ({
+        id: row.id,
+        type: row.railingType,
+        label: row.label,
+        description: row.description,
+        cost_per_lf: 0,
+        active: row.active,
+        sort_order: row.sort_order,
+      }));
+
+    if (deckingProducts.length > 0) await onImport(deckingProducts);
+    if (railingProducts.length > 0) await onImportRailing(railingProducts);
+
+    if (railingProducts.length > 0) {
+      alert(`Imported ${deckingProducts.length} decking rows and auto-routed ${railingProducts.length} railing rows.`);
+    }
+
     e.currentTarget.value = "";
   }
 
@@ -390,6 +587,12 @@ function DeckingTable({
             Import CSV
             <input type="file" accept=".csv,text/csv,.txt,text/tab-separated-values" className="hidden" onChange={handleImport} />
           </label>
+          <button
+            onClick={() => void onAutoSort()}
+            className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 hover:bg-amber-100"
+          >
+            Auto-Sort Existing Rows
+          </button>
           <button
             onClick={() => setEditing(emptyProduct)}
             className="rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
@@ -626,7 +829,7 @@ function RailingTable({
       .filter((r) => r.length > 0)
       .map((r, idx) => ({
         id: r[col.id] ?? `railing-${idx + 1}`,
-        type: (r[col.type] ?? "metal") || "metal",
+        type: parseRailingType((r[col.type] ?? "metal") || "metal"),
         label: r[col.label] ?? "",
         description: r[col.description] ?? "",
         cost_per_lf: Number(r[col.cost_per_lf] ?? r[col.cost] ?? 0),
@@ -784,7 +987,7 @@ function RailingEditor({
             </label>
             <select
               value={form.type}
-              onChange={(e) => setForm({ ...form, type: e.target.value })}
+              onChange={(e) => setForm({ ...form, type: parseRailingType(e.target.value) })}
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
             >
               <option value="wood">Wood</option>
